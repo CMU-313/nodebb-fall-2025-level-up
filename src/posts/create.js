@@ -18,7 +18,6 @@ module.exports = function (Posts) {
 		const content = data.content.toString();
 		const timestamp = data.timestamp || Date.now();
 		const isMain = data.isMain || false;
-		const anonymous = data.anonymous || false;
 
 		if (!uid && parseInt(uid, 10) !== 0) {
 			throw new Error('[[error:invalid-uid]]');
@@ -29,15 +28,7 @@ module.exports = function (Posts) {
 		}
 
 		const pid = data.pid || await db.incrObjectField('global', 'nextPid');
-		let postData = { 
-			pid, 
-			uid, 
-			tid, 
-			content, 
-			sourceContent, 
-			timestamp,
-			anonymous,
-		};
+		let postData = { pid, uid, tid, content, sourceContent, timestamp };
 
 		if (data.toPid) {
 			postData.toPid = data.toPid;
@@ -89,10 +80,6 @@ module.exports = function (Posts) {
 			groups.onNewPostMade(postData),
 			addReplyTo(postData, timestamp),
 			Posts.uploads.sync(postData.pid),
-			...(anonymous ? [
-				db.sortedSetAdd('posts:anonymous', timestamp, postData.pid),
-				db.sortedSetAdd(`cid:${topicData.cid}:posts:anonymous`, timestamp, postData.pid),
-			] : []),
 		]);
 
 		const result = await plugins.hooks.fire('filter:post.get', { post: postData, uid: data.uid });
