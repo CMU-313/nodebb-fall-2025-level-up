@@ -38,6 +38,15 @@
 					[[topic:composer.private-to-staff]]
 				</label>
 			</div>
+
+			<!-- Anonymous Post Option -->
+			<div class="form-check mt-2">
+				<input class="form-check-input" type="checkbox" id="anonymous-post" name="anonymous">
+				<label class="form-check-label" for="anonymous">
+					[[topic:composer.anonymous-post]]
+				</label>
+			</div>
+
 			{{{ end }}}
 
 			<div class="imagedrop"><div>[[topic:composer.drag-and-drop-images]]</div></div>
