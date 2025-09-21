@@ -74,6 +74,22 @@ define('forum/topic', [
 
 		handleTopicSearch();
 
+		// TEMP: Mock anonymous flag on frontend
+		if (Array.isArray(ajaxify.data.posts)) {
+			ajaxify.data.posts.forEach((post) => {
+				// Simulate: mark user with UID 4 as anonymous
+				if (post && post.uid === 4) {
+					post.anonymous = true;
+
+					// Optional: override name and avatar locally
+					post.user.displayname = 'Anonymous';
+					post.user.userslug = null;
+					post.user.picture = config.relative_path + '/images/default-avatar.png';
+				}
+			});
+		}
+
+
 		hooks.fire('action:topic.loaded', ajaxify.data);
 	};
 
