@@ -7,7 +7,7 @@ const utils = require('../utils');
 const intFields = [
 	'uid', 'pid', 'tid', 'deleted', 'timestamp',
 	'upvotes', 'downvotes', 'deleterUid', 'edited',
-	'replies', 'bookmarks', 'announces',
+	'replies', 'bookmarks', 'announces', 'anonymous',
 ];
 
 module.exports = function (Posts) {
@@ -69,6 +69,11 @@ function modifyPost(post, fields) {
 		}
 		if (!fields.length || fields.includes('attachments')) {
 			post.attachments = (post.attachments || '').split(',').filter(Boolean);
+		}
+
+		if (post.anonymous) {
+			post.realUid = post.uid;
+			post.uid = 0;
 		}
 	}
 }
