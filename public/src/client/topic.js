@@ -78,7 +78,7 @@ define('forum/topic', [
 		if (Array.isArray(ajaxify.data.posts)) {
 			ajaxify.data.posts.forEach((post) => {
 				// Simulate: mark user with UID 4 as anonymous
-				if (post && post.uid === 4) {
+				if (post && post.is_anon) {
 					post.anonymous = true;
 
 					// Optional: override name and avatar locally
