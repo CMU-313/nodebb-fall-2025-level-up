@@ -363,6 +363,17 @@ define('composer', [
 			postContainer.find('#private-to-staff').prop('checked', true);
 		}
 
+		//Persist anonymous checkbox state
+		postContainer.on('change', '#anonymous-post', function () {
+			composer.posts[post_uuid].anonymous = $(this).is(':checked');
+			composer.posts[post_uuid].modified = true;
+		});
+
+		// Restore checkbox state if draft had it
+		if (composer.posts[post_uuid].anonymous) {
+			postContainer.find('#anonymous-post').prop('checked', true);
+		}
+
 		postContainer.on('click', '.composer-submit', function (e) {
 			e.preventDefault();
 			e.stopPropagation(); // Other click events bring composer back to active state which is undesired on submit
@@ -749,6 +760,7 @@ define('composer', [
 				tags: tags.getTags(post_uuid),
 				timestamp: scheduler.getTimestamp(),
 				private: postContainer.find('#private-to-staff').is(':checked'),
+				anonymous: postContainer.find('#anonymous-post').is(':checked'),
 			};
 		} else if (action === 'posts.reply') {
 			route = `/topics/${postData.tid}`;
