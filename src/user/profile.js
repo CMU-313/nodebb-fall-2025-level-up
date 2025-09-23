@@ -256,21 +256,22 @@ module.exports = function (User) {
 			try {
 				const parsed = JSON.parse(raw);
 				if (Array.isArray(parsed)) {
-					return parsed.map(String).filter(Boolean);
+					return parsed;
 				}
 			} catch {
 			}
 		}
-		return Array.isArray(raw) ? raw.map(String).filter(Boolean) : [String(raw)];
+		if (Array.isArray(raw)) {
+			return raw;
+		}
+		return [raw];
 	}
 	
 	function validateGroupTitles(titles) {
-		if (!Array.isArray(titles) || titles.length === 0) {
-			throw new Error('[[error:invalid-group-title]]');
-		}
-		const invalid = titles.find(t => t === 'registered-users' || groups.isPrivilegeGroup(t));
-		if (invalid) {
-			throw new Error('[[error:invalid-group-title]]');
+		for (const t of titles) {
+			if (t === 'registered-users' || groups.isPrivilegeGroup(t)) {
+				throw new Error('[[error:invalid-group-title]]');
+			}
 		}
 	}
 
