@@ -352,6 +352,17 @@ define('composer', [
 			composer.posts[post_uuid].modified = true;
 		});
 
+		// Persist private-to-staff checkbox state
+		postContainer.on('change', '#private-to-staff', function () {
+			composer.posts[post_uuid].private = $(this).is(':checked');
+			composer.posts[post_uuid].modified = true;
+		});
+	
+		// Restore checkbox state if draft had it
+		if (composer.posts[post_uuid].private) {
+			postContainer.find('#private-to-staff').prop('checked', true);
+		}
+
 		postContainer.on('click', '.composer-submit', function (e) {
 			e.preventDefault();
 			e.stopPropagation(); // Other click events bring composer back to active state which is undesired on submit
@@ -739,7 +750,6 @@ define('composer', [
 				timestamp: scheduler.getTimestamp(),
 				private: postContainer.find('#private-to-staff').is(':checked'),
 			};
-			console.log('DEBUG: private flag =', composerData.private); // <-- TEMP
 		} else if (action === 'posts.reply') {
 			route = `/topics/${postData.tid}`;
 			composerData = {
