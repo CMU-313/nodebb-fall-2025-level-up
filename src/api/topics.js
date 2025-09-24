@@ -52,6 +52,13 @@ topicsAPI.get = async function (caller, data) {
 		return null;
 	}
 
+	if (parseInt(topic.private, 10) === 1) {
+		const isStaff = await privileges.topics.isAdminOrMod(topic.tid, caller.uid);
+		if (!isStaff) {
+			return null; // hide from students
+		}
+	}
+
 	return topic;
 };
 
