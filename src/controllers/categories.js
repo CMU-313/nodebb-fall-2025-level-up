@@ -50,7 +50,7 @@ categoriesController.list = async function (req, res) {
 	data.categories.forEach((category) => {
 		if (category) {
 			helpers.trimChildren(category);
-			helpers.setCategoryTeaser(category);
+			helpers.setCategoryTeaser(category, req.uid);
 		}
 	});
 
