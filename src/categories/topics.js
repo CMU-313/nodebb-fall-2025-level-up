@@ -86,20 +86,24 @@ module.exports = function (Categories) {
 	};
 
 	Categories.getTopicCount = async function (data) {
-		if (plugins.hooks.hasListeners('filter:categories.getTopicCount')) {
-			const result = await plugins.hooks.fire('filter:categories.getTopicCount', {
-				topicCount: data.category.topic_count,
-				data: data,
-			});
-			return result && result.topicCount;
-		}
 		const set = await Categories.buildTopicsSortedSet(data);
-		if (Array.isArray(set)) {
-			return await db.sortedSetIntersectCard(set);
-		} else if (data.targetUid && set) {
-			return await db.sortedSetCard(set);
+	
+		// Get all tids in the set
+		const tids = Array.isArray(set)
+			? await db.getSortedSetRange(set, 0, -1)
+			: await db.getSortedSetRange([set], 0, -1);
+	
+		// Load topics
+		let topicsData = await topics.getTopicsByTids(tids, data.uid);
+	
+		// Filter out private topics for non-staff
+		const isAdmin = await privileges.users.isAdministrator(data.uid);
+		const isMod = await privileges.users.isModerator(data.uid);
+		if (!isAdmin && !isMod) {
+			topicsData = topicsData.filter(t => t.private !== '1');
 		}
-		return data.category.topic_count;
+	
+		return topicsData.length;
 	};
 
 	Categories.buildTopicsSortedSet = async function (data) {
