@@ -8,6 +8,19 @@ const topics = require('../topics');
 const posts = require('../posts');
 const helpers = require('./helpers');
 
+// Commit 2 - Generate Anonymous Names/Nicknames
+function generateAnonymousName() {
+	const animals = [
+		'Fox', 'Panda', 'Tiger', 'Owl', 'Dolphin',
+		'Hedgehog', 'Falcon', 'Penguin', 'Wolf', 'Koala',
+		'Rabbit', 'Eagle', 'Lion', 'Bear', 'Giraffe',
+		'Zebra', 'Cheetah', 'Leopard', 'Kangaroo', 'Elephant',
+		'Phoenix', 'Dragon', 'Unicorn', 'Griffin', 'Hydra',
+	];
+	const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
+	return `Anonymous ${randomAnimal}`;
+}
+
 exports.get = async function (req, res, callback) {
 	res.locals.metaTags = {
 		...res.locals.metaTags,
@@ -57,7 +70,7 @@ exports.post = async function (req, res) {
 		data.anonymous = false;
 	}
 
-	
+
 	req.body.noscript = 'true';
 
 	if (!data.content) {
