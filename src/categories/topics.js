@@ -17,12 +17,25 @@ module.exports = function (Categories) {
 		const tids = await Categories.getTopicIds(results);
 		let topicsData = await topics.getTopicsByTids(tids, data.uid);
 		topicsData = await user.blocks.filter(data.uid, topicsData);
-
+	
 		if (!topicsData.length) {
 			return { topics: [], uid: data.uid };
 		}
+	
+		// Filter out private topics for non-staff
+		if (Array.isArray(topicsData) && topicsData.length) {
+			const visibility = await Promise.all(topicsData.map(async (t) => {
+				if (parseInt(t.private, 10) !== 1) {
+					return true;
+				}
+				// Staff check
+				return data.uid ? privileges.topics.isAdminOrMod(t.tid, data.uid) : false;
+			}));
+			topicsData = topicsData.filter((t, idx) => visibility[idx]);
+		}
+	
 		topics.calculateTopicIndices(topicsData, data.start);
-
+	
 		results = await plugins.hooks.fire('filter:category.topics.get', { cid: data.cid, topics: topicsData, uid: data.uid });
 		return { topics: results.topics, nextStart: data.stop + 1 };
 	};
