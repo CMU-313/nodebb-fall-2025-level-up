@@ -70,6 +70,12 @@ exports.post = async function (req, res) {
 		data.anonymous = false;
 	}
 
+	// Commit 3 - Apply anonymous name if anonymous flag is set
+	if (data.anonymous) {
+		data.handle = generateAnonymousName();
+		data.uid = 0; // optional: hides real user ID
+	}
+
 
 	req.body.noscript = 'true';
 
