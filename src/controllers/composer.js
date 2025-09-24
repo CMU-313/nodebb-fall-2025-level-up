@@ -49,6 +49,15 @@ exports.post = async function (req, res) {
 		handle: body.handle,
 		fromQueue: false,
 	};
+
+	// Commit 1 - Capture anonymous flag from form 
+	if (body.anonymous === 'true' || body.anonymous === true) {
+		data.anonymous = true;
+	} else {
+		data.anonymous = false;
+	}
+
+	
 	req.body.noscript = 'true';
 
 	if (!data.content) {
