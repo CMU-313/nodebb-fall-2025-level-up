@@ -84,37 +84,27 @@ module.exports = function (Categories) {
 		} else {
 			keys = categoriesToLoad.map(c => `cid:${c.cid}:recent_tids`);
 		}
-	
+
 		const results = await db.getSortedSetsMembers(keys);
 		let tids = _.uniq(_.flatten(results).filter(Boolean));
-	
+
 		tids = await privileges.topics.filterTids('topics:read', tids, uid);
-		let topicsData = await getTopics(tids, uid);
-	
-		// Filter private topics for non-staff
-		const isAdmin = await privileges.users.isAdministrator(uid);
-		const isMod = await privileges.users.isModerator(uid);
-		if (!isAdmin && !isMod) {
-			topicsData = topicsData.filter(t => !t.topic || t.topic.private !== '1');
-		}
-		// -----------------------------------------------
-	
-		assignTopicsToCategories(categoryData, topicsData);
+		const topics = await getTopics(tids, uid);
+		assignTopicsToCategories(categoryData, topics);
+
 		bubbleUpChildrenPosts(categoryData);
 	};
-	
 
 	async function getTopics(tids, uid) {
 		const topicData = await topics.getTopicsFields(
 			tids,
-			['tid', 'mainPid', 'slug', 'title', 'teaserPid', 'cid', 'postcount', 'private']
+			['tid', 'mainPid', 'slug', 'title', 'teaserPid', 'cid', 'postcount']
 		);
 		topicData.forEach((topic) => {
 			if (topic) {
 				topic.teaserPid = topic.teaserPid || topic.mainPid;
 			}
 		});
-	
 		const cids = _.uniq(topicData.map(t => t && t.cid).filter(cid => parseInt(cid, 10)));
 		const getToRoot = async () => await Promise.all(cids.map(Categories.getParentCids));
 		const [toRoot, teasers] = await Promise.all([
@@ -122,35 +112,21 @@ module.exports = function (Categories) {
 			topics.getTeasers(topicData, uid),
 		]);
 		const cidToRoot = _.zipObject(cids, toRoot);
-	
-		// Attach topic info to teasers
+
 		teasers.forEach((teaser, index) => {
 			if (teaser) {
-				const t = topicData[index];
-				teaser.cid = t.cid;
+				teaser.cid = topicData[index].cid;
 				teaser.parentCids = cidToRoot[teaser.cid];
-				teaser.tid = t.tid;
-				teaser.uid = t.uid;
+				teaser.tid = topicData[index].tid;
+				teaser.uid = topicData[index].uid;
 				teaser.topic = {
-					tid: t.tid,
-					slug: t.slug,
-					title: t.title,
-					private: t.private,
+					tid: topicData[index].tid,
+					slug: topicData[index].slug,
+					title: topicData[index].title,
 				};
 			}
 		});
-	
-		// Hide private teasers for non-staff
-		const isAdmin = await privileges.users.isAdministrator(uid);
-		const isMod = await privileges.users.isModerator(uid);
-		let visibleTeasers = teasers.filter(Boolean);
-	
-		if (!isAdmin && !isMod) {
-			visibleTeasers = visibleTeasers.filter(teaser => teaser.topic.private !== '1');
-		}
-		// -------------------------------
-	
-		return visibleTeasers;
+		return teasers.filter(Boolean);
 	}
 
 	function assignTopicsToCategories(categories, topics) {

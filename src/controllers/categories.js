@@ -30,11 +30,8 @@ categoriesController.list = async function (req, res) {
 
 	const allChildCids = _.flatten(await Promise.all(pageCids.map(categories.getChildrenCids)));
 	const childCids = await privileges.categories.filterCids('find', allChildCids, req.uid);
-
-	// Pass req.uid so counts are adjusted for private topics
-	const categoryData = await categories.getCategories(pageCids.concat(childCids), req.uid);
+	const categoryData = await categories.getCategories(pageCids.concat(childCids));
 	const tree = categories.getTree(categoryData, 0);
-
 	await Promise.all([
 		categories.getRecentTopicReplies(categoryData, req.uid, req.query),
 		categories.setUnread(tree, pageCids.concat(childCids), req.uid),
@@ -50,7 +47,7 @@ categoriesController.list = async function (req, res) {
 	data.categories.forEach((category) => {
 		if (category) {
 			helpers.trimChildren(category);
-			helpers.setCategoryTeaser(category, req.uid);
+			helpers.setCategoryTeaser(category);
 		}
 	});
 

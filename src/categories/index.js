@@ -76,18 +76,6 @@ Categories.getCategoryById = async function (data) {
 	category.hasFollowers = localFollowers ? (localFollowers.uids.size + localFollowers.cids.size) > 0 : localFollowers;
 	category.parent = parent;
 
-	// Adjust counts for non-staff
-	const isStaff = await privileges.categories.isAdminOrMod(data.cid, data.uid || 0);
-	if (!isStaff) {
-		const visibleTopics = category.topics.filter(t => t.private !== '1');
-		category.topic_count = visibleTopics.length;
-		category.post_count = visibleTopics.reduce(
-			(sum, t) => sum + (parseInt(t.postcount, 10) || 0),
-			0
-		);
-	}
-	// ---
-
 	calculateTopicPostCount(category);
 	const result = await plugins.hooks.fire('filter:category.get', {
 		category: category,
@@ -146,7 +134,7 @@ Categories.getModeratorUids = async function (cids) {
 	return await privileges.categories.getUidsWithPrivilege(cids, 'moderate');
 };
 
-Categories.getCategories = async function (cids, uid = 0) {
+Categories.getCategories = async function (cids) {
 	if (!Array.isArray(cids)) {
 		throw new Error('[[error:invalid-cid]]');
 	}
@@ -159,30 +147,13 @@ Categories.getCategories = async function (cids, uid = 0) {
 		Categories.getCategoriesData(cids),
 		Categories.getTagWhitelist(cids),
 	]);
-
-	const isAdmin = await privileges.users.isAdministrator(uid);
-	const isMod = await privileges.users.isModerator(uid);
-	
-	if (!isAdmin && !isMod) {
-		const promises = categories.map((category, i) => {
-			if (!category) return null;
+	categories.forEach((category, i) => {
+		if (category) {
 			category.tagWhitelist = tagWhitelist[i];
-			return topics.getVisibleCounts(category.cid, uid).then((visibleCounts) => {
-				category.topic_count = visibleCounts.topicCount;
-				category.post_count = visibleCounts.postCount;
-			});
-		});
-		await Promise.all(promises.filter(Boolean));
-	} else {
-		categories.forEach((category, i) => {
-			if (category) {
-				category.tagWhitelist = tagWhitelist[i];
-			}
-		});
-	}
-	
+		}
+	});
 	return categories;
-	};
+};
 
 Categories.setUnread = async function (tree, cids, uid) {
 	if (uid <= 0) {
