@@ -34,10 +34,11 @@ module.exports = function (Posts) {
 		});
 
 		const result = await Promise.all(userData.map(async (userData) => {
-			const [isMemberOfGroups, signature, customProfileInfo] = await Promise.all([
+			const [isMemberOfGroups, signature, customProfileInfo, isAdmin] = await Promise.all([
 				checkGroupMembership(userData.uid, userData.groupTitleArray),
 				parseSignature(userData, uid, uidsSignatureSet),
 				plugins.hooks.fire('filter:posts.custom_profile_info', { profile: [], uid: userData.uid }),
+				user.isAdministrator ? user.isAdministrator(userData.uid) : false,
 			]);
 
 			if (isMemberOfGroups && userData.groupTitleArray) {
@@ -49,6 +50,13 @@ module.exports = function (Posts) {
 			}
 			userData.signature = signature;
 			userData.custom_profile_info = customProfileInfo.profile;
+
+			// If user is an administrator, add an Instructor badge into custom_profile_info so it
+			// will render without changing the API schema (avoids adding new top-level fields).
+			if (isAdmin) {
+				userData.custom_profile_info = userData.custom_profile_info || [];
+				userData.custom_profile_info.unshift({ content: '<span class="badge bg-primary ms-1 instructor-tag">Instructor</span>' });
+			}
 
 			return await plugins.hooks.fire('filter:posts.modifyUserInfo', userData);
 		}));
