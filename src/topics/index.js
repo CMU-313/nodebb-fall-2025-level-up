@@ -330,4 +330,31 @@ Topics.search = async function (tid, term) {
 	return Array.isArray(result) ? result : result.ids;
 };
 
+/**
+ * Return counts for only the topics/posts visible to a given user.
+ * This excludes private topics for non-staff.
+ */
+Topics.getVisibleCounts = async function (cid, uid) {
+	// Get all topic ids for this category
+	const tids = await db.getSortedSetRange(`cid:${cid}:tids`, 0, -1);
+	if (!tids.length) {
+		return { topicCount: 0, postCount: 0 };
+	}
+
+	const allTopics = await Topics.getTopicsByTids(tids, uid);
+
+	// Filter out private topics for non-staff
+	const isAdmin = await privileges.users.isAdministrator(uid);
+	const isMod = await privileges.users.isModerator(uid);
+	const visibleTopics = (isAdmin || isMod) ?
+		allTopics :
+		allTopics.filter(t => t.private !== '1');
+
+	// Count visible topics and their posts
+	const topicCount = visibleTopics.length;
+	const postCount = visibleTopics.reduce((sum, t) => sum + (t.postcount || 0), 0);
+
+	return { topicCount, postCount };
+};
+
 require('../promisify')(Topics);
