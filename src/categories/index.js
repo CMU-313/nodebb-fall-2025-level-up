@@ -160,27 +160,29 @@ Categories.getCategories = async function (cids, uid = 0) {
 		Categories.getTagWhitelist(cids),
 	]);
 
-	// Figure out staff privileges once
 	const isAdmin = await privileges.users.isAdministrator(uid);
 	const isMod = await privileges.users.isModerator(uid);
-
-	for (let i = 0; i < categories.length; i++) {
-		const category = categories[i];
-		if (!category) {
-			continue;
-		}
-		category.tagWhitelist = tagWhitelist[i];
-
-		// If not staff, adjust counts to hide private topics/posts
-		if (!isAdmin && !isMod) {
-			const visibleCounts = await topics.getVisibleCounts(category.cid, uid);
-			category.topic_count = visibleCounts.topicCount;
-			category.post_count = visibleCounts.postCount;
-		}
+	
+	if (!isAdmin && !isMod) {
+		const promises = categories.map((category, i) => {
+			if (!category) return null;
+			category.tagWhitelist = tagWhitelist[i];
+			return topics.getVisibleCounts(category.cid, uid).then((visibleCounts) => {
+				category.topic_count = visibleCounts.topicCount;
+				category.post_count = visibleCounts.postCount;
+			});
+		});
+		await Promise.all(promises.filter(Boolean));
+	} else {
+		categories.forEach((category, i) => {
+			if (category) {
+				category.tagWhitelist = tagWhitelist[i];
+			}
+		});
 	}
-
+	
 	return categories;
-};
+	};
 
 Categories.setUnread = async function (tree, cids, uid) {
 	if (uid <= 0) {

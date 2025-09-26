@@ -89,9 +89,9 @@ module.exports = function (Categories) {
 		const set = await Categories.buildTopicsSortedSet(data);
 	
 		// Get all tids in the set
-		const tids = Array.isArray(set)
-			? await db.getSortedSetRange(set, 0, -1)
-			: await db.getSortedSetRange([set], 0, -1);
+		const tids = Array.isArray(set) ?
+			await db.getSortedSetRange(set, 0, -1) :
+			await db.getSortedSetRange([set], 0, -1);
 	
 		// Load topics
 		let topicsData = await topics.getTopicsByTids(tids, data.uid);
