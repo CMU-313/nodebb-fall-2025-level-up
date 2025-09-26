@@ -388,42 +388,19 @@ helpers.trimChildren = function (category) {
 	}
 };
 
-helpers.setCategoryTeaser = async function (category, uid) {
-	if (Array.isArray(category.posts) && category.posts.length) {
-		for (const post of category.posts) {
-			// If post or topic is missing, skip
-			if (!post || !post.topic) {
-				continue;
-			}
-
-			// If post belongs to a private topic
-			if (post.topic.private === '1') {
-				// Allow only admins/moderators
-				const [isAdmin, isMod] = await Promise.all([
-					privileges.users.isAdministrator(uid),
-					privileges.users.isModerator(uid),
-				]);
-				if (!isAdmin && !isMod) {
-					continue; // skip to next post
-				}
-			}
-
-			// Build teaser if visible
-			category.teaser = {
-				url: `${nconf.get('relative_path')}/post/${post.pid}`,
-				timestampISO: post.timestampISO,
-				pid: post.pid,
-				tid: post.tid,
-				index: post.index,
-				topic: post.topic,
-				user: post.user,
-			};
-			return;
-		}
+helpers.setCategoryTeaser = function (category) {
+	if (Array.isArray(category.posts) && category.posts.length && category.posts[0]) {
+		const post = category.posts[0];
+		category.teaser = {
+			url: `${nconf.get('relative_path')}/post/${post.pid}`,
+			timestampISO: post.timestampISO,
+			pid: post.pid,
+			tid: post.tid,
+			index: post.index,
+			topic: post.topic,
+			user: post.user,
+		};
 	}
-
-	// No visible teaser found
-	category.teaser = null;
 };
 
 function checkVisibleChildren(c, cidToAllowed, cidToWatchState, states) {
