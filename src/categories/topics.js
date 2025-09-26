@@ -17,12 +17,25 @@ module.exports = function (Categories) {
 		const tids = await Categories.getTopicIds(results);
 		let topicsData = await topics.getTopicsByTids(tids, data.uid);
 		topicsData = await user.blocks.filter(data.uid, topicsData);
-
+	
 		if (!topicsData.length) {
 			return { topics: [], uid: data.uid };
 		}
+	
+		// Filter out private topics for non-staff
+		if (Array.isArray(topicsData) && topicsData.length) {
+			const visibility = await Promise.all(topicsData.map(async (t) => {
+				if (parseInt(t.private, 10) !== 1) {
+					return true;
+				}
+				// Staff check
+				return data.uid ? privileges.topics.isAdminOrMod(t.tid, data.uid) : false;
+			}));
+			topicsData = topicsData.filter((t, idx) => visibility[idx]);
+		}
+	
 		topics.calculateTopicIndices(topicsData, data.start);
-
+	
 		results = await plugins.hooks.fire('filter:category.topics.get', { cid: data.cid, topics: topicsData, uid: data.uid });
 		return { topics: results.topics, nextStart: data.stop + 1 };
 	};
@@ -73,20 +86,24 @@ module.exports = function (Categories) {
 	};
 
 	Categories.getTopicCount = async function (data) {
-		if (plugins.hooks.hasListeners('filter:categories.getTopicCount')) {
-			const result = await plugins.hooks.fire('filter:categories.getTopicCount', {
-				topicCount: data.category.topic_count,
-				data: data,
-			});
-			return result && result.topicCount;
-		}
 		const set = await Categories.buildTopicsSortedSet(data);
-		if (Array.isArray(set)) {
-			return await db.sortedSetIntersectCard(set);
-		} else if (data.targetUid && set) {
-			return await db.sortedSetCard(set);
+	
+		// Get all tids in the set
+		const tids = Array.isArray(set) ?
+			await db.getSortedSetRange(set, 0, -1) :
+			await db.getSortedSetRange([set], 0, -1);
+	
+		// Load topics
+		let topicsData = await topics.getTopicsByTids(tids, data.uid);
+	
+		// Filter out private topics for non-staff
+		const isAdmin = await privileges.users.isAdministrator(data.uid);
+		const isMod = await privileges.users.isModerator(data.uid);
+		if (!isAdmin && !isMod) {
+			topicsData = topicsData.filter(t => t.private !== '1');
 		}
-		return data.category.topic_count;
+	
+		return topicsData.length;
 	};
 
 	Categories.buildTopicsSortedSet = async function (data) {
