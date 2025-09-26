@@ -125,6 +125,10 @@ get:
                                                   type: string
                                                 title:
                                                   type: string
+                                                private:
+                                                  type: string
+                                                  enum: ["0", "1"]
+                                                  description: Whether the topic is private (1 = private, 0 = public)
                                       imageClass:
                                         type: string
                                       timesClicked:
@@ -196,6 +200,10 @@ get:
                                         type: string
                                       title:
                                         type: string
+                                      private:
+                                        type: string
+                                        enum: ["0", "1"]
+                                        description: Whether the topic is private (1 = private, 0 = public)
                             teaser:
                               type: object
                               properties:
@@ -220,6 +228,10 @@ get:
                                       type: string
                                     title:
                                       type: string
+                                    private:
+                                      type: string
+                                      enum: ["0", "1"]
+                                      description: Whether the topic is private (1 = private, 0 = public)
                                 user:
                                   type: object
                                   properties:
