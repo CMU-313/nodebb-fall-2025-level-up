@@ -8,6 +8,19 @@ const topics = require('../topics');
 const posts = require('../posts');
 const helpers = require('./helpers');
 
+// Commit 2 - Generate Anonymous Names/Nicknames
+function generateAnonymousName() {
+	const animals = [
+		'Fox', 'Panda', 'Tiger', 'Owl', 'Dolphin',
+		'Hedgehog', 'Falcon', 'Penguin', 'Wolf', 'Koala',
+		'Rabbit', 'Eagle', 'Lion', 'Bear', 'Giraffe',
+		'Zebra', 'Cheetah', 'Leopard', 'Kangaroo', 'Elephant',
+		'Phoenix', 'Dragon', 'Unicorn', 'Griffin', 'Hydra',
+	];
+	const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
+	return `Anonymous ${randomAnimal}`;
+}
+
 exports.get = async function (req, res, callback) {
 	res.locals.metaTags = {
 		...res.locals.metaTags,
@@ -49,6 +62,21 @@ exports.post = async function (req, res) {
 		handle: body.handle,
 		fromQueue: false,
 	};
+
+	// Commit 1 - Capture anonymous flag from form 
+	if (body.anonymous === 'true' || body.anonymous === true) {
+		data.anonymous = true;
+	} else {
+		data.anonymous = false;
+	}
+
+	// Commit 3 - Apply anonymous name if anonymous flag is set
+	if (data.anonymous) {
+		data.handle = generateAnonymousName();
+		data.uid = 0; // optional: hides real user ID
+	}
+
+
 	req.body.noscript = 'true';
 
 	if (!data.content) {

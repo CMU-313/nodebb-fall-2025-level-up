@@ -43,7 +43,12 @@
 						</a>
 					</div>
 
-					<a class="fw-bold text-nowrap text-truncate" href="{{{ if ./user.userslug }}}{config.relative_path}/user/{./user.userslug}{{{ else }}}#{{{ end }}}" data-username="{posts.user.username}" data-uid="{posts.user.uid}">{posts.user.displayname}</a>
+					{{{ if posts.user.custom_profile_info.anon }}}
+						<span class="fw-bold text-nowrap text-truncate">Anonymous</span>
+					{{{ else }}}
+						<a class="fw-bold text-nowrap text-truncate" href="{{{ if ./user.userslug }}}{config.relative_path}/user/{./user.userslug}{{{ else }}}#{{{ end }}}" data-username="{posts.user.username}" data-uid="{posts.user.uid}">{posts.user.displayname}</a>
+					{{{ end }}}
+
 				</div>
 
 				{{{ each posts.user.selectedGroups }}}
