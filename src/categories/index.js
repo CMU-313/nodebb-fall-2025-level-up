@@ -182,7 +182,7 @@ Categories.getCategories = async function (cids, uid = 0) {
 	}
 	
 	return categories;
-};
+	};
 
 Categories.setUnread = async function (tree, cids, uid) {
 	if (uid <= 0) {
