@@ -123,8 +123,16 @@ topicsController.get = async function getTopic(req, res, next) {
 		p => parseInt(p.index, 10) === parseInt(Math.max(0, postIndex - 1), 10)
 	);
 
+	// Handle anonymous topics - fetch author data appropriately
+	let authorPromise;
+	if (topicData.isAnonymous) {
+		authorPromise = Promise.resolve(topics.getAnonymousUser());
+	} else {
+		authorPromise = user.getUserFields(topicData.uid, ['username', 'userslug']);
+	}
+
 	const [author] = await Promise.all([
-		user.getUserFields(topicData.uid, ['username', 'userslug']),
+		authorPromise,
 		buildBreadcrumbs(topicData),
 		addOldCategory(topicData, userPrivileges),
 		addTags(topicData, req, res, currentPage, postAtIndex),
@@ -290,7 +298,8 @@ async function addTags(topicData, req, res, currentPage, postAtIndex) {
 		});
 	}
 
-	if (postAtIndex) {
+	// Handle author link for anonymous topics
+	if (postAtIndex && !topicData.isAnonymous) {
 		res.locals.linkTags.push({
 			rel: 'author',
 			href: `${url}/user/${postAtIndex.user.userslug}`,
@@ -323,7 +332,8 @@ async function addOGImageTags(res, topicData, postAtIndex) {
 	if (topicData.category.backgroundImage && (!postAtIndex || !postAtIndex.index)) {
 		images.push(topicData.category.backgroundImage);
 	}
-	if (postAtIndex && postAtIndex.user && postAtIndex.user.picture) {
+	// Don't include user picture for anonymous topics
+	if (postAtIndex && postAtIndex.user && postAtIndex.user.picture && !topicData.isAnonymous) {
 		images.push(postAtIndex.user.picture);
 	}
 	images.forEach(path => addOGImageTag(res, path));
