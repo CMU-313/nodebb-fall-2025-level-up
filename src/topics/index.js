@@ -346,9 +346,9 @@ Topics.getVisibleCounts = async function (cid, uid) {
 	// Filter out private topics for non-staff
 	const isAdmin = await privileges.users.isAdministrator(uid);
 	const isMod = await privileges.users.isModerator(uid);
-	const visibleTopics = (isAdmin || isMod)
-		? allTopics
-		: allTopics.filter(t => t.private !== '1');
+	const visibleTopics = (isAdmin || isMod) ?
+		allTopics :
+		allTopics.filter(t => t.private !== '1');
 
 	// Count visible topics and their posts
 	const topicCount = visibleTopics.length;
