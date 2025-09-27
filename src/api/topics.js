@@ -71,6 +71,8 @@ topicsAPI.create = async function (caller, data) {
 	delete payload.tid;
 	payload.tags = payload.tags || [];
 
+
+	payload.anonymous = !!data.anonymous;
 	// Add private flag from composer (default: false)
 	payload.private = !!data.private;
 

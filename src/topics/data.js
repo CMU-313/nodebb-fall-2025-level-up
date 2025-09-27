@@ -13,7 +13,7 @@ const intFields = [
 	'viewcount', 'postercount', 'followercount',
 	'deleted', 'locked', 'pinned', 'pinExpiry',
 	'timestamp', 'upvotes', 'downvotes',
-	'lastposttime', 'deleterUid',
+	'lastposttime', 'deleterUid', 'anonymous',
 ];
 
 module.exports = function (Topics) {
@@ -139,5 +139,14 @@ function modifyTopic(topic, fields) {
 				class: escaped.replace(/\s/g, '-'),
 			};
 		});
+	}
+
+	// Handle anonymous topics
+	if (topic.hasOwnProperty('anonymous') && parseInt(topic.anonymous, 10) === 1) {
+		topic.isAnonymous = true;
+		if (topic.hasOwnProperty('uid')) {
+			topic.originalUid = topic.uid; // Store original for admin purposes
+			topic.uid = 0; // Set to guest for display
+		}
 	}
 }

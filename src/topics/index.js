@@ -42,6 +42,21 @@ Topics.exists = async function (tids) {
 	);
 };
 
+Topics.getAnonymousUser = function () {
+	return {
+		uid: 0,
+		username: 'Anonymous',
+		displayname: 'Anonymous',
+		userslug: '',
+		reputation: 0,
+		postcount: 0,
+		picture: null,
+		signature: '',
+		banned: 0,
+		status: 'online'
+	};
+};
+
 Topics.getTopicsFromSet = async function (set, uid, start, stop) {
 	const tids = await db.getSortedSetRevRange(set, start, stop);
 	const topics = await Topics.getTopics(tids, uid);
@@ -133,13 +148,20 @@ Topics.getTopicsByTids = async function (tids, options) {
 		if (topic) {
 			topic.thumbs = result.thumbs[i];
 			topic.category = result.categoriesMap[topic.cid];
-			topic.user = topic.uid ? result.usersMap[topic.uid] : { ...result.usersMap[topic.uid] };
-			if (result.tidToGuestHandle[topic.tid]) {
-				topic.user.username = validator.escape(result.tidToGuestHandle[topic.tid]);
-				topic.user.displayname = topic.user.username;
+			
+			// Handle anonymous topics
+			if (topic.isAnonymous) {
+				topic.user = Topics.getAnonymousUser();
+			} else {
+				topic.user = topic.uid ? result.usersMap[topic.uid] : { ...result.usersMap[topic.uid] };
+				if (result.tidToGuestHandle[topic.tid]) {
+					topic.user.username = validator.escape(result.tidToGuestHandle[topic.tid]);
+					topic.user.displayname = topic.user.username;
+				}
 			}
+			
 			topic.teaser = result.teasers[i] || null;
-			topic.isOwner = topic.uid === parseInt(uid, 10);
+			topic.isOwner = !topic.isAnonymous && topic.originalUid === parseInt(uid, 10);
 			topic.ignored = followData[i].ignoring;
 			topic.followed = followData[i].following;
 			topic.unread = parseInt(uid, 10) <= 0 || (!hasRead[i] && !topic.ignored);
@@ -311,7 +333,7 @@ async function getMainPosts(mainPids, uid) {
 		}
 	});
 	return await Topics.addPostData(postData, uid);
-}
+};
 
 Topics.isLocked = async function (tid) {
 	const locked = await Topics.getTopicField(tid, 'locked');
