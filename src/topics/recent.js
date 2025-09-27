@@ -5,6 +5,7 @@ const db = require('../database');
 const plugins = require('../plugins');
 const posts = require('../posts');
 const utils = require('../utils');
+const privileges = require('../privileges');
 
 module.exports = function (Topics) {
 	const terms = {
@@ -25,12 +26,25 @@ module.exports = function (Topics) {
 		});
 	};
 
-	/* not an orphan method, used in widget-essentials */
 	Topics.getLatestTopics = async function (options) {
-		// uid, start, stop, term
 		const tids = await Topics.getLatestTidsFromSet('topics:recent', options.start, options.stop, options.term);
-		const topics = await Topics.getTopics(tids, options);
-		return { topics: topics, nextStart: options.stop + 1 };
+		let topics = await Topics.getTopics(tids, options);
+	
+		// Filter out private topics if the user is not staff
+		if (Array.isArray(topics) && topics.length) {
+			const visibility = await Promise.all(topics.map(async (t) => {
+				// Always allow if not private
+				if (parseInt(t.private, 10) !== 1) {
+					return true;
+				}
+				// Otherwise, check if user is staff for that topic
+				return options.uid ? privileges.topics.isAdminOrMod(t.tid, options.uid) : false;
+			}));
+	
+			topics = topics.filter((t, idx) => visibility[idx]);
+		}
+	
+		return { topics, nextStart: options.stop + 1 };
 	};
 
 	Topics.getSinceFromTerm = function (term) {
