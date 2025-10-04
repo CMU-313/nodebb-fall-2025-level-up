@@ -133,9 +133,30 @@ module.exports = function (Topics) {
 			Topics.addParentPosts(postData, uid),
 		]);
 
+		// Check if user is admin or mod for the topic (if we have posts)
+		const privileges = require('../privileges');
+		const isViewerAdminOrMod = postData.length > 0 ? await privileges.topics.isAdminOrMod(postData[0].tid, uid) : false;
+
 		postData.forEach((postObj, i) => {
 			if (postObj) {
-				postObj.user = postObj.uid ? userData[postObj.uid] : { ...userData[postObj.uid] };
+				// Handle anonymous posts - check if post should be displayed as anonymous
+				const isAnonymous = parseInt(postObj.anonymous, 10) === 1;
+				const isPostAuthor = parseInt(uid, 10) === parseInt(postObj.uid, 10);
+				if (isAnonymous && !isViewerAdminOrMod && !isPostAuthor) {
+					// Store original uid for admin reference
+					postObj.originalUid = postObj.uid;
+					postObj.user = {
+						uid: 0,
+						username: 'Anonymous',
+						userslug: '',
+						picture: '',
+						status: 'offline',
+						displayname: 'Anonymous'
+					};
+				} else {
+					postObj.user = postObj.uid ? userData[postObj.uid] : { ...userData[postObj.uid] };
+				}
+				
 				postObj.editor = postObj.editor ? editors[postObj.editor] : null;
 				postObj.bookmarked = bookmarks[i];
 				postObj.upvoted = voteData.upvotes[i];

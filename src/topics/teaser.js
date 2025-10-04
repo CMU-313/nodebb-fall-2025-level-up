@@ -43,7 +43,7 @@ module.exports = function (Topics) {
 		});
 
 		const [allPostData, callerSettings] = await Promise.all([
-			posts.getPostsFields(teaserPids, ['pid', 'uid', 'timestamp', 'tid', 'content', 'sourceContent']),
+			posts.getPostsFields(teaserPids, ['pid', 'uid', 'timestamp', 'tid', 'content', 'sourceContent', 'anonymous']),
 			user.getSettings(uid),
 		]);
 		let postData = allPostData.filter(post => post && post.pid);
@@ -131,7 +131,7 @@ module.exports = function (Topics) {
 				const mainPid = await Topics.getTopicField(postData.tid, 'mainPid');
 				pids = [mainPid];
 			}
-			const prevPosts = await posts.getPostsFields(pids, ['pid', 'uid', 'timestamp', 'tid', 'content']);
+			const prevPosts = await posts.getPostsFields(pids, ['pid', 'uid', 'timestamp', 'tid', 'content', 'anonymous']);
 			isBlocked = prevPosts.every(checkBlocked);
 			start += postsPerIteration;
 			stop = start + postsPerIteration - 1;
