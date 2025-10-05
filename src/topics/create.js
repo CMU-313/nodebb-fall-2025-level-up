@@ -306,7 +306,7 @@ module.exports = function (Topics) {
 	}
 
 	async function canReply(data, topicData) {
-		if (!topicData) {
+		if (!topicData || !topicData.cid) {
 			throw new Error('[[error:no-topic]]');
 		}
 		const { tid, uid } = data;

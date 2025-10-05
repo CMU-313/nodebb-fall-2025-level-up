@@ -37,6 +37,9 @@ PostObject:
     timestampISO:
       type: string
       description: An ISO 8601 formatted date string (complementing `timestamp`)
+    anonymous:
+      type: number
+      description: Whether the post is anonymous (1) or not (0)
     user:
       type: object
       properties:
@@ -191,6 +194,9 @@ PostDataObject:
         timestampISO:
           type: string
           description: An ISO 8601 formatted date string (complementing `timestamp`)
+        anonymous:
+          type: number
+          description: Whether the post is anonymous (1) or not (0)
         editedISO:
           type: string
         index:
