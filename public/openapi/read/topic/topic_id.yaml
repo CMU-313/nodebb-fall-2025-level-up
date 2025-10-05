@@ -40,6 +40,10 @@ get:
                   teaserPid:
                     type: number
                     nullable: true
+                  private:
+                    type: string
+                    enum: ["0", "1"]
+                    description: Whether the topic is private (1 = private, 0 = public)
                   titleRaw:
                     type: string
                   tags:

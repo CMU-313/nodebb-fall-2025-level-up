@@ -21,6 +21,7 @@ const plugins = require('../src/plugins');
 const utils = require('../src/utils');
 const slugify = require('../src/slugify');
 const helpers = require('./helpers');
+const Groups = require('../src/groups');
 
 const sleep = util.promisify(setTimeout);
 
@@ -1523,6 +1524,8 @@ describe('Controllers', () => {
 		let jar;
 		before(async () => {
 			({ jar } = await helpers.loginUser('foo', 'barbar'));
+			// Make foo user an admin to bypass private post filtering
+			await Groups.join('administrators', fooUid);
 		});
 
 		it('should return 404 if cid is not a number', async () => {

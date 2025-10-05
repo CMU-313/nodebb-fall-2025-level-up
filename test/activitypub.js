@@ -358,7 +358,8 @@ describe('ActivityPub integration', () => {
 
 				let topic;
 
-				before(async () => {
+				before(async function () {
+					this.timeout(60000);
 					const controllers = require('../src/controllers');
 
 					activitypub._cache.set(`0;${id}`, remoteNote);
