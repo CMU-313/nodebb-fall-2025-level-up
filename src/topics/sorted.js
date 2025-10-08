@@ -296,6 +296,15 @@ module.exports = function (Topics) {
 		tids = tids.slice(params.start, params.stop !== -1 ? params.stop + 1 : undefined);
 		const topicData = await Topics.getTopicsByTids(tids, params);
 		Topics.calculateTopicIndices(topicData, params.start);
+	
+		if (Array.isArray(topicData)) {
+			for (const topic of topicData) {
+				if (!topic) continue;
+				topic.private = parseInt(topic.private, 10) || 0;
+				topic.isAdminOrMod = await privileges.topics.isAdminOrMod(topic.tid, params.uid);
+			}
+		}
+	
 		return topicData;
 	}
 
