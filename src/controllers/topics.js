@@ -103,6 +103,8 @@ topicsController.get = async function getTopic(req, res, next) {
 	topicData.tagWhitelist = categories.filterTagWhitelist(topicData.tagWhitelist, userPrivileges.isAdminOrMod);
 
 	topicData.privileges = userPrivileges;
+	topicData.private = parseInt(topicData.private, 10) || 0;
+	topicData.isAdminOrMod = userPrivileges.isAdminOrMod || userPrivileges.isAdmin || userPrivileges['topics:moderate'];
 	topicData.topicStaleDays = meta.config.topicStaleDays;
 	topicData['reputation:disabled'] = meta.config['reputation:disabled'];
 	topicData['downvote:disabled'] = meta.config['downvote:disabled'];
