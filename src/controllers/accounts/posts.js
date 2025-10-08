@@ -279,7 +279,7 @@ async function getItemData(sets, data, req, start, stop) {
 		return await data.getTopics(sets, req, start, stop);
 	}
 	const method = data.type === 'topics' ? topics.getTopicsFromSet : posts.getPostSummariesFromSet;
-	let result = await method(sets, req.uid, start, stop);
+	const result = await method(sets, req.uid, start, stop);
 	
 	if (data.type === 'topics' && result && result.topics) {
 		result.topics = await filterVisibleTopics(result.topics, req.uid);

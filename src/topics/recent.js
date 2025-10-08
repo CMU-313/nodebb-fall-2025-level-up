@@ -5,7 +5,6 @@ const db = require('../database');
 const plugins = require('../plugins');
 const posts = require('../posts');
 const utils = require('../utils');
-const privileges = require('../privileges');
 const { filterVisibleTopics } = require('./filter');
 
 module.exports = function (Topics) {
