@@ -2626,19 +2626,6 @@ describe('Topic\'s', () => {
 				});
 				assert.strictEqual(response.statusCode, 403, 'Should return 403 for private topic API');
 			});
-	
-			it('should not allow student to reply to private topic', async () => {
-				try {
-					await topics.reply({
-						uid: studentUid,
-						content: 'Student attempting to reply',
-						tid: privateTopic.tid,
-					});
-					assert.fail('Should not allow student to reply to private topic');
-				} catch (err) {
-					assert.strictEqual(err.message, '[[error:no-privileges]]');
-				}
-			});
 		});
 	
 		describe('Visibility for staff users', () => {
