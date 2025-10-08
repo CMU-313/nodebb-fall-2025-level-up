@@ -126,8 +126,8 @@ get:
                                                 title:
                                                   type: string
                                                 private:
-                                                  type: string
-                                                  enum: ["0", "1"]
+                                                  type: integer
+                                                  enum: [0, 1]
                                                   description: Whether the topic is private (1 = private, 0 = public)
                                       imageClass:
                                         type: string
@@ -201,8 +201,8 @@ get:
                                       title:
                                         type: string
                                       private:
-                                        type: string
-                                        enum: ["0", "1"]
+                                        type: integer
+                                        enum: [0, 1]
                                         description: Whether the topic is private (1 = private, 0 = public)
                             teaser:
                               type: object
@@ -229,8 +229,8 @@ get:
                                     title:
                                       type: string
                                     private:
-                                      type: string
-                                      enum: ["0", "1"]
+                                      type: integer
+                                      enum: [0, 1]
                                       description: Whether the topic is private (1 = private, 0 = public)
                                 user:
                                   type: object
