@@ -12,6 +12,7 @@ const pagination = require('../../pagination');
 const helpers = require('../helpers');
 const plugins = require('../../plugins');
 const utils = require('../../utils');
+const { filterVisibleTopics, filterVisiblePosts } = require('../../topics/filter');
 
 const postsController = module.exports;
 
@@ -278,7 +279,16 @@ async function getItemData(sets, data, req, start, stop) {
 		return await data.getTopics(sets, req, start, stop);
 	}
 	const method = data.type === 'topics' ? topics.getTopicsFromSet : posts.getPostSummariesFromSet;
-	return await method(sets, req.uid, start, stop);
+	let result = await method(sets, req.uid, start, stop);
+	
+	if (data.type === 'topics' && result && result.topics) {
+		result.topics = await filterVisibleTopics(result.topics, req.uid);
+	}
+	if (data.type === 'posts' && result && result.posts) {
+		result.posts = await filterVisiblePosts(result.posts, req.uid);
+	}
+	
+	return result;
 }
 
 async function getItemCount(sets, data, settings) {
