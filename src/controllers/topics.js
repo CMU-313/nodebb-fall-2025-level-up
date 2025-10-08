@@ -35,6 +35,15 @@ topicsController.get = async function getTopic(req, res, next) {
 	if (!topicData) {
 		return next();
 	}
+	if (parseInt(topicData.private, 10) === 1) {
+		const isOwner = String(topicData.uid) === String(req.uid);
+		const isPrivileged = req.uid ? await privileges.topics.isAdminOrMod(tid, req.uid) : false;
+	
+		if (!isOwner && !isPrivileged) {
+			// Show "not found" page to hide private topic existence
+			return helpers.notAllowed(req, res);
+		}
+	}
 	const [
 		userPrivileges,
 		settings,
