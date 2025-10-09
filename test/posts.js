@@ -1259,6 +1259,75 @@ describe('Post\'s', () => {
 			});
 		});
 	});
+
+	describe('Instructor tagline in posts', () => {
+		let adminUser;
+		let regularUser;
+		let testCategory;
+
+		before(async () => {
+			// Create admin user
+			adminUser = await user.create({ username: 'posts_instructor_admin', password: '123456' });
+			await groups.join('administrators', adminUser);
+
+			// Create regular user  
+			regularUser = await user.create({ username: 'posts_regular_student', password: '123456' });
+
+			// Create test category
+			testCategory = await categories.create({
+				name: 'Posts Instructor Test Category',
+				description: 'Category for testing instructor taglines in posts',
+			});
+		});
+
+		it('should add instructor tagline to admin user posts', async () => {
+			// Create topic and post by admin user
+			const topicData = await topics.post({
+				uid: adminUser,
+				cid: testCategory.cid,
+				title: 'Test Topic for Post Instructor Tag',
+				content: 'This is the main post content by admin',
+			});
+
+			// Get the post user info (this is what displays the instructor tagline)
+			const userInfo = await posts.getUserInfoForPosts([adminUser], adminUser);
+			
+			assert(Array.isArray(userInfo));
+			assert.strictEqual(userInfo.length, 1);
+			
+			const adminUserInfo = userInfo[0];
+			assert.strictEqual(adminUserInfo.uid, adminUser);
+			
+			// Check that custom_profile_info exists and contains instructor tagline
+			assert(Array.isArray(adminUserInfo.custom_profile_info));
+			assert.strictEqual(adminUserInfo.custom_profile_info.length, 1);
+			assert(adminUserInfo.custom_profile_info[0].content.includes('instructor-tag'));
+			assert(adminUserInfo.custom_profile_info[0].content.includes('Instructor'));
+		});
+
+		it('should NOT add instructor tagline to regular user posts', async () => {
+			// Get regular user info
+			const userInfo = await posts.getUserInfoForPosts([regularUser], regularUser);
+			
+			assert(Array.isArray(userInfo));
+			assert.strictEqual(userInfo.length, 1);
+			
+			const regularUserInfo = userInfo[0];
+			assert.strictEqual(regularUserInfo.uid, regularUser);
+			
+			// Check that custom_profile_info is either empty or doesn't contain instructor tagline
+			if (regularUserInfo.custom_profile_info) {
+				const hasInstructorTag = regularUserInfo.custom_profile_info.some(info => 
+					info.content && info.content.includes('instructor-tag')
+				);
+				assert.strictEqual(hasInstructorTag, false, 'Regular user should not have instructor tag');
+			}
+		});
+
+		after(async () => {
+			// Clean up test data - no need to delete users as they will be cleaned up by test framework
+		});
+	});
 });
 
 describe('Posts\'', async () => {

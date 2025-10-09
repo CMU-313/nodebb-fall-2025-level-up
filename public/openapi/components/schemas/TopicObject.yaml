@@ -78,6 +78,14 @@ TopicObject:
               example: "#f44336"
             banned_until_readable:
               type: string
+            custom_profile_info:
+              type: array
+              items:
+                type: object
+                properties:
+                  content:
+                    type: string
+                    description: HTML that is injected into topic lists for custom profile info (e.g. instructor tags)
           required:
             - uid
             - username
@@ -137,6 +145,14 @@ TopicObject:
                     `icon:text` for the user's
                     auto-generated icon
                   example: "#f44336"
+                custom_profile_info:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      content:
+                        type: string
+                        description: HTML that is injected for custom profile info (e.g. instructor tags)
             index:
               type: number
           nullable: true

@@ -56,6 +56,13 @@
 						<i class="fa fa-arrow-circle-right"></i>
 						<span>[[topic:moved]]</span>
 					</span>
+					{{{ if ./user.custom_profile_info }}}
+					{{{ each ./user.custom_profile_info }}}
+					<span class="badge bg-primary text-white instructor-tag">
+						<span class="text-xs">Instructor</span>
+					</span>
+					{{{ end }}}
+					{{{ end }}}
 					{{{each ./icons}}}<span class="lh-1">{@value}</span>{{{end}}}
 
 					{{{ if !template.category }}}

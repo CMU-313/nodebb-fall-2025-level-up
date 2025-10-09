@@ -2507,6 +2507,160 @@ describe('Topic\'s', () => {
 		});
 	});
 
+	describe('Instructor tagline feature', () => {
+		let adminUser;
+		let regularUser;
+		let testTopic;
+		let testCategory;
+
+		before(async () => {
+			// Create admin user
+			adminUser = await User.create({ username: 'instructor_admin', password: '123456' });
+			await groups.join('administrators', adminUser);
+
+			// Create regular user  
+			regularUser = await User.create({ username: 'regular_student', password: '123456' });
+
+			// Create test category
+			testCategory = await categories.create({
+				name: 'Instructor Test Category',
+				description: 'Category for testing instructor taglines',
+			});
+		});
+
+		it('should add instructor tagline to admin user in topics', async () => {
+			// Create topic by admin user
+			const topicData = await topics.post({
+				uid: adminUser,
+				cid: testCategory.cid,
+				title: 'Test Topic by Admin',
+				content: 'This topic is created by an admin user',
+			});
+
+			// Get topics using the same function that category pages use
+			const topicsData = await topics.getTopicsByTids([topicData.topicData.tid], { uid: 0 });
+			
+			assert(Array.isArray(topicsData));
+			assert.strictEqual(topicsData.length, 1);
+			
+			const topic = topicsData[0];
+			assert(topic.user);
+			assert.strictEqual(topic.user.uid, adminUser);
+			
+			// Check that custom_profile_info exists and contains instructor tagline
+			assert(Array.isArray(topic.user.custom_profile_info));
+			assert.strictEqual(topic.user.custom_profile_info.length, 1);
+			assert(topic.user.custom_profile_info[0].content.includes('instructor-tag'));
+			assert(topic.user.custom_profile_info[0].content.includes('Instructor'));
+		});
+
+		it('should NOT add instructor tagline to regular user in topics', async () => {
+			// Create topic by regular user
+			const topicData = await topics.post({
+				uid: regularUser,
+				cid: testCategory.cid,
+				title: 'Test Topic by Regular User',
+				content: 'This topic is created by a regular user',
+			});
+
+			// Get topics using the same function that category pages use
+			const topicsData = await topics.getTopicsByTids([topicData.topicData.tid], { uid: 0 });
+			
+			assert(Array.isArray(topicsData));
+			assert.strictEqual(topicsData.length, 1);
+			
+			const topic = topicsData[0];
+			assert(topic.user);
+			assert.strictEqual(topic.user.uid, regularUser);
+			
+			// Check that custom_profile_info is either empty or doesn't exist
+			if (topic.user.custom_profile_info) {
+				assert.strictEqual(topic.user.custom_profile_info.length, 0);
+			} else {
+				assert.strictEqual(topic.user.custom_profile_info, undefined);
+			}
+		});
+
+		it('should work correctly with mixed admin and regular users in topic lists', async () => {
+			// Create topics by both users
+			const adminTopicData = await topics.post({
+				uid: adminUser,
+				cid: testCategory.cid,
+				title: 'Admin Topic for Mixed Test',
+				content: 'Admin topic content',
+			});
+
+			const regularTopicData = await topics.post({
+				uid: regularUser,
+				cid: testCategory.cid,
+				title: 'Regular Topic for Mixed Test',
+				content: 'Regular topic content',
+			});
+
+			// Get both topics
+			const topicsData = await topics.getTopicsByTids([
+				adminTopicData.topicData.tid,
+				regularTopicData.topicData.tid,
+			], { uid: 0 });
+			
+			assert(Array.isArray(topicsData));
+			assert.strictEqual(topicsData.length, 2);
+
+			// Find admin and regular topics
+			const adminTopic = topicsData.find(t => t.user.uid === adminUser);
+			const regularTopic = topicsData.find(t => t.user.uid === regularUser);
+
+			assert(adminTopic, 'Admin topic should be found');
+			assert(regularTopic, 'Regular topic should be found');
+
+			// Admin topic should have instructor tagline
+			assert(Array.isArray(adminTopic.user.custom_profile_info));
+			assert.strictEqual(adminTopic.user.custom_profile_info.length, 1);
+			assert(adminTopic.user.custom_profile_info[0].content.includes('instructor-tag'));
+
+			// Regular topic should NOT have instructor tagline
+			if (regularTopic.user.custom_profile_info) {
+				assert.strictEqual(regularTopic.user.custom_profile_info.length, 0);
+			} else {
+				assert.strictEqual(regularTopic.user.custom_profile_info, undefined);
+			}
+		});
+
+		it('should work with category topic retrieval functions', async () => {
+			// Create admin topic
+			const topicData = await topics.post({
+				uid: adminUser,
+				cid: testCategory.cid,
+				title: 'Category Test Topic',
+				content: 'Testing category topic functions',
+			});
+
+			// Test the category topics function that's used in category pages
+			const categoryTopics = await categories.getCategoryTopics({
+				cid: testCategory.cid,
+				start: 0,
+				stop: 19,
+				uid: 0,
+			});
+
+			assert(categoryTopics.topics);
+			assert(Array.isArray(categoryTopics.topics));
+			
+			const adminTopic = categoryTopics.topics.find(t => t.user && t.user.uid === adminUser);
+			assert(adminTopic, 'Admin topic should be found in category topics');
+
+			// Check instructor tagline is present
+			assert(Array.isArray(adminTopic.user.custom_profile_info));
+			assert.strictEqual(adminTopic.user.custom_profile_info.length, 1);
+			assert(adminTopic.user.custom_profile_info[0].content.includes('instructor-tag'));
+			assert(adminTopic.user.custom_profile_info[0].content.includes('Instructor'));
+		});
+
+		after(async () => {
+			// Clean up test data - no need to delete users as they will be cleaned up by test framework
+		});
+	});
+
 	describe('Private Posts', () => {
 		let studentUid;
 		let studentJar;

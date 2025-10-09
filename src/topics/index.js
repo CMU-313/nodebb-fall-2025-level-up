@@ -103,12 +103,24 @@ Topics.getTopicsByTids = async function (tids, options) {
 			Topics.thumbs.load(topics),
 		]);
 
+		// Check admin status for instructor taglines
+		const adminStatuses = await Promise.all(uids.map(async (uid) => {
+			return user.isAdministrator ? await user.isAdministrator(uid) : false;
+		}));
+
 		users.forEach((userObj, idx) => {
 			// Hide fullname if needed
 			if (!userSettings[idx].showfullname) {
 				userObj.fullname = undefined;
 			}
+
+			// Add instructor tagline if user is an administrator
+			if (adminStatuses[idx]) {
+				userObj.custom_profile_info = userObj.custom_profile_info || [];
+				userObj.custom_profile_info.unshift({ content: '<span class="badge bg-primary ms-1 instructor-tag">Instructor</span>' });
+			}
 		});
+
 
 		return {
 			topics,
@@ -138,6 +150,7 @@ Topics.getTopicsByTids = async function (tids, options) {
 				topic.user.username = validator.escape(result.tidToGuestHandle[topic.tid]);
 				topic.user.displayname = topic.user.username;
 			}
+
 			topic.teaser = result.teasers[i] || null;
 			topic.isOwner = topic.uid === parseInt(uid, 10);
 			topic.ignored = followData[i].ignoring;
