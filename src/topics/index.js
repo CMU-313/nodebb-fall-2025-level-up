@@ -155,6 +155,15 @@ Topics.getTopicsByTids = async function (tids, options) {
 	const filteredTopics = result.topics.filter(topic => topic && topic.category && !topic.category.disabled);
 
 	const hookResult = await plugins.hooks.fire('filter:topics.get', { topics: filteredTopics, uid: uid });
+
+	if (Array.isArray(hookResult.topics)) {
+		await Promise.all(hookResult.topics.map(async (topic) => {
+			if (!topic) return;
+			topic.private = parseInt(topic.private, 10) || 0;
+			topic.isAdminOrMod = await privileges.topics.isAdminOrMod(topic.tid, uid);
+		}));
+	}
+	
 	return hookResult.topics;
 };
 

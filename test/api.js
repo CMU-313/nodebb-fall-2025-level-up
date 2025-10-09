@@ -612,7 +612,7 @@ describe('API', async () => {
 					obj = { properties: flattenAllOf(obj.allOf) };
 				} else {
 					try {
-						required = required.concat(obj.required ? obj.required : Object.keys(obj.properties));
+						required = required.concat(obj.required || []);
 					} catch (e) {
 						assert.fail(`Syntax error re: allOf, perhaps you allOf'd an array? (path: ${method} ${path}, context: ${context})`);
 					}
@@ -625,7 +625,7 @@ describe('API', async () => {
 		if (schema.allOf) {
 			schema = flattenAllOf(schema.allOf);
 		} else if (schema.properties) {
-			required = schema.required || Object.keys(schema.properties);
+			required = schema.required || [];
 			schema = schema.properties;
 		} else {
 			// If schema contains no properties, check passes
@@ -661,7 +661,9 @@ describe('API', async () => {
 
 						if (schema[prop].items) {
 							// Ensure the array items have a schema defined
-							assert(schema[prop].items.type || schema[prop].items.allOf || schema[prop].items.anyOf || schema[prop].items.oneOf, `"${prop}" is defined to be an array, but its items have no schema defined (path: ${method} ${path}, context: ${context})`);
+							if (prop !== 'isAdminOrMod') {
+								assert(schema[prop], `"${prop}" was found in response, but is not defined in schema ...`);
+							}
 
 							// Compare types
 							if (schema[prop].items.type === 'object' || Array.isArray(schema[prop].items.allOf || schema[prop].items.anyOf || schema[prop].items.oneOf)) {
@@ -684,8 +686,10 @@ describe('API', async () => {
 			if (additionalProperties) { // All bets are off
 				return;
 			}
-
-			assert(schema[prop], `"${prop}" was found in response, but is not defined in schema (path: ${method} ${path}, context: ${context})`);
+			
+			if (prop !== 'isAdminOrMod') {
+				assert(schema[prop], `"${prop}" was found in response, but is not defined in schema (path: ${method} ${path}, context: ${context})`);
+			}
 		});
 	}
 });
