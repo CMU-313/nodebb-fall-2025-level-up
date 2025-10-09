@@ -2658,6 +2658,360 @@ describe('Topic\'s', () => {
 
 		after(async () => {
 			// Clean up test data - no need to delete users as they will be cleaned up by test framework
+	describe('Private Posts', () => {
+		let studentUid;
+		let studentJar;
+		let privateTopic;
+		let publicTopic;
+		let privateCategory;
+	
+		before(async () => {
+			// Create a student (non-admin) user
+			studentUid = await User.create({ username: 'student', password: '123456' });
+			const studentLogin = await helpers.loginUser('student', '123456');
+			studentJar = studentLogin.jar;
+	
+			// Create a category for testing
+			privateCategory = await categories.create({
+				name: 'Private Test Category',
+				description: 'Category for private post testing',
+			});
+	
+			// Create a private topic
+			const privateResult = await topics.post({
+				uid: adminUid,
+				title: 'Private Topic Title',
+				content: 'This is a private topic',
+				cid: privateCategory.cid,
+				private: 1,
+			});
+			privateTopic = privateResult.topicData;
+	
+			// Create a public topic for comparison
+			const publicResult = await topics.post({
+				uid: adminUid,
+				title: 'Public Topic Title',
+				content: 'This is a public topic',
+				cid: privateCategory.cid,
+				private: 0,
+			});
+			publicTopic = publicResult.topicData;
+	
+			// Add a reply to the private topic
+			await topics.reply({
+				uid: adminUid,
+				content: 'Private topic reply',
+				tid: privateTopic.tid,
+			});
+		});
+	
+		describe('Visibility for non-staff users', () => {
+			it('should not show private topics in category page for students', async () => {
+				const { body } = await request.get(`${nconf.get('url')}/api/category/${privateCategory.slug}`, {
+					jar: studentJar,
+				});
+				
+				const privateTids = body.topics.map(t => t.tid);
+				assert(!privateTids.includes(privateTopic.tid), 'Private topic should not appear in category');
+				assert(privateTids.includes(publicTopic.tid), 'Public topic should appear in category');
+			});
+	
+			it('should not show private topics in recent topics for students', async () => {
+				const data = await topics.getLatestTopics({
+					uid: studentUid,
+					start: 0,
+					stop: 19,
+					term: 'alltime',
+				});
+	
+				const tids = data.topics.map(t => t.tid);
+				assert(!tids.includes(privateTopic.tid), 'Private topic should not appear in recent');
+			});
+	
+			it('should not show private topics in popular topics for students', async () => {
+				const data = await topics.getSortedTopics({
+					uid: studentUid,
+					start: 0,
+					stop: 19,
+					sort: 'posts',
+				});
+	
+				const tids = data.topics.map(t => t.tid);
+				assert(!tids.includes(privateTopic.tid), 'Private topic should not appear in popular');
+			});
+	
+			it('should not show private topics in user profile topics tab for students', async () => {
+				const adminData = await User.getUserData(adminUid);
+				const { body } = await request.get(`${nconf.get('url')}/api/user/${adminData.userslug}/topics`, {
+					jar: studentJar,
+				});
+				
+				if (body.topics) {
+					const tids = body.topics.map(t => t.tid);
+					assert(!tids.includes(privateTopic.tid), 'Private topic should not appear in user topics');
+				}
+			});
+	
+			it('should not show private posts in user profile posts tab for students', async () => {
+				const adminData = await User.getUserData(adminUid);
+				const { body } = await request.get(`${nconf.get('url')}/api/user/${adminData.userslug}/posts`, {
+					jar: studentJar,
+				});
+				
+				if (body.posts) {
+					const tids = body.posts.map(p => p.tid);
+					assert(!tids.includes(privateTopic.tid), 'Posts from private topics should not appear');
+				}
+			});
+	
+			it('should return 403 when student accesses private topic via direct URL', async () => {
+				const { response } = await request.get(`${nconf.get('url')}/topic/${privateTopic.slug}`, {
+					jar: studentJar,
+				});
+				assert.strictEqual(response.statusCode, 403, 'Should return 403 for private topic');
+			});
+	
+			it('should return 403 when student accesses private topic via API', async () => {
+				const { response } = await request.get(`${nconf.get('url')}/api/topic/${privateTopic.slug}`, {
+					jar: studentJar,
+				});
+				assert.strictEqual(response.statusCode, 403, 'Should return 403 for private topic API');
+			});
+		});
+	
+		describe('Visibility for staff users', () => {
+			it('should show private topics in category page for admin', async () => {
+				const { body } = await request.get(`${nconf.get('url')}/api/category/${privateCategory.slug}`, {
+					jar: adminJar,
+				});
+	
+				const topic = body.topics.find(t => t.tid === privateTopic.tid);
+				assert(topic, 'Private topic should appear in category for admin');
+				assert.strictEqual(parseInt(topic.private, 10), 1, 'Topic should be marked as private');
+			});
+	
+			it('should show private topics in recent topics for admin', async () => {
+				const data = await topics.getLatestTopics({
+					uid: adminUid,
+					start: 0,
+					stop: 19,
+					term: 'alltime',
+				});
+	
+				const topic = data.topics.find(t => t.tid === privateTopic.tid);
+				assert(topic, 'Private topic should appear in recent for admin');
+			});
+	
+			it('should show private topics in popular topics for admin', async () => {
+				const data = await topics.getSortedTopics({
+					uid: adminUid,
+					start: 0,
+					stop: 19,
+					sort: 'posts',
+				});
+	
+				const topic = data.topics.find(t => t.tid === privateTopic.tid);
+				assert(topic, 'Private topic should appear in popular for admin');
+			});
+	
+			it('should show private topics in user profile for admin', async () => {
+				const adminData = await User.getUserData(adminUid);
+				const { body } = await request.get(`${nconf.get('url')}/api/user/${adminData.userslug}/topics`, {
+					jar: adminJar,
+				});
+				
+				if (body.topics) {
+					const topic = body.topics.find(t => t.tid === privateTopic.tid);
+					assert(topic, 'Private topic should appear in profile for admin');
+				}
+			});
+	
+			it('should allow admin to access private topic via direct URL', async () => {
+				const { response } = await request.get(`${nconf.get('url')}/topic/${privateTopic.slug}`, {
+					jar: adminJar,
+				});
+				assert.strictEqual(response.statusCode, 200);
+			});
+	
+			it('should show private field in topic view for admin', async () => {
+				const { body } = await request.get(`${nconf.get('url')}/api/topic/${privateTopic.slug}`, {
+					jar: adminJar,
+				});
+				assert.strictEqual(parseInt(body.private, 10), 1, 'Topic should have private flag');
+			});
+	
+			it('should allow admin to reply to private topic', async () => {
+				const result = await topics.reply({
+					uid: adminUid,
+					content: 'Admin reply to private topic',
+					tid: privateTopic.tid,
+				});
+				assert(result, 'Admin should be able to reply to private topic');
+			});
+	
+			it('should allow moderator to access private topic', async () => {
+				const modUid = await User.create({ username: 'moderator', password: '123456' });
+				await groups.join('Global Moderators', modUid);
+				const modLogin = await helpers.loginUser('moderator', '123456');
+	
+				const { response } = await request.get(`${nconf.get('url')}/topic/${privateTopic.slug}`, {
+					jar: modLogin.jar,
+				});
+				assert.strictEqual(response.statusCode, 200, 'Moderator should access private topic');
+			});
+		});
+	
+		describe('Private topic creation', () => {
+			it('should create a topic as private when private flag is set', async () => {
+				const result = await topics.post({
+					uid: adminUid,
+					title: 'New Private Topic',
+					content: 'Content of new private topic',
+					cid: privateCategory.cid,
+					private: 1,
+				});
+	
+				const topicData = await topics.getTopicData(result.topicData.tid);
+				assert.strictEqual(topicData.private, '1', 'Topic should be created as private');
+			});
+	
+			it('should create a topic as public when private flag is not set', async () => {
+				const result = await topics.post({
+					uid: adminUid,
+					title: 'New Public Topic',
+					content: 'Content of new public topic',
+					cid: privateCategory.cid,
+				});
+	
+				const topicData = await topics.getTopicData(result.topicData.tid);
+				assert.strictEqual(topicData.private, '0', 'Topic should be created as public by default');
+			});
+	
+			it('should allow student to create private topic', async () => {
+				const result = await topics.post({
+					uid: studentUid,
+					title: 'Student Private Topic',
+					content: 'Student creating private topic',
+					cid: privateCategory.cid,
+					private: 1,
+				});
+	
+				const topicData = await topics.getTopicData(result.topicData.tid);
+				assert.strictEqual(topicData.private, '1', 'Student should be able to create private topic');
+			});
+		});
+	
+		describe('Topic owner visibility', () => {
+			it('should allow topic owner to see their own private topic via direct URL', async () => {
+				const ownerUid = await User.create({ username: 'topicowner', password: '123456' });
+				const ownerLogin = await helpers.loginUser('topicowner', '123456');
+				
+				const result = await topics.post({
+					uid: ownerUid,
+					title: 'Owner Private Topic',
+					content: 'Private topic by owner',
+					cid: privateCategory.cid,
+					private: 1,
+				});
+	
+				const { response } = await request.get(`${nconf.get('url')}/topic/${result.topicData.slug}`, {
+					jar: ownerLogin.jar,
+				});
+				assert.strictEqual(response.statusCode, 200, 'Owner should access their own private topic');
+			});
+	
+			it('should NOT show other users private topics in their profile for non-staff', async () => {
+				const ownerUid = await User.create({ username: 'topicowner2', password: '123456' });
+				const ownerData = await User.getUserData(ownerUid);
+				
+				const result = await topics.post({
+					uid: ownerUid,
+					title: 'Owner Private Topic 2',
+					content: 'Private topic by owner 2',
+					cid: privateCategory.cid,
+					private: 1,
+				});
+	
+				const { body } = await request.get(`${nconf.get('url')}/api/user/${ownerData.userslug}/topics`, {
+					jar: studentJar,
+				});
+	
+				if (body.topics) {
+					const topic = body.topics.find(t => t.tid === result.topicData.tid);
+					assert(!topic, 'Owner private topic should NOT appear when viewed by student');
+				}
+			});
+	
+			it('should allow topic owner to see their own private topics in their profile', async () => {
+				const ownerUid = await User.create({ username: 'topicowner3', password: '123456' });
+				const ownerLogin = await helpers.loginUser('topicowner3', '123456');
+				const ownerData = await User.getUserData(ownerUid);
+				
+				const result = await topics.post({
+					uid: ownerUid,
+					title: 'Owner Private Topic 3',
+					content: 'Private topic by owner 3',
+					cid: privateCategory.cid,
+					private: 1,
+				});
+	
+				const { body } = await request.get(`${nconf.get('url')}/api/user/${ownerData.userslug}/topics`, {
+					jar: ownerLogin.jar,
+				});
+	
+				if (body.topics) {
+					const topic = body.topics.find(t => t.tid === result.topicData.tid);
+					assert(topic, 'Owner should see their own private topic in their profile');
+				}
+			});
+	
+			it('should allow topic owner to reply to their own private topic', async () => {
+				const ownerUid = await User.create({ username: 'topicowner4', password: '123456' });
+				
+				const result = await topics.post({
+					uid: ownerUid,
+					title: 'Owner Private Topic 4',
+					content: 'Private topic by owner 4',
+					cid: privateCategory.cid,
+					private: 1,
+				});
+	
+				const reply = await topics.reply({
+					uid: ownerUid,
+					content: 'Owner replying to own private topic',
+					tid: result.topicData.tid,
+				});
+				
+				assert(reply, 'Owner should be able to reply to their own private topic');
+			});
+		});
+	
+		describe('Edge cases', () => {
+			it('should handle deleted private topics correctly', async () => {
+				const result = await topics.post({
+					uid: adminUid,
+					title: 'Deleted Private Topic',
+					content: 'Will be deleted',
+					cid: privateCategory.cid,
+					private: 1,
+				});
+	
+				await apiTopics.delete({ uid: adminUid }, {
+					tids: [result.topicData.tid],
+					cid: privateCategory.cid,
+				});
+	
+				const { response } = await request.get(`${nconf.get('url')}/topic/${result.topicData.slug}`, {
+					jar: studentJar,
+				});
+				assert.strictEqual(response.statusCode, 403, 'Deleted private topic should return 403');
+			});
+	
+			it('should not include private topics in suggested topics for students', async () => {
+				const suggestions = await topics.getSuggestedTopics(publicTopic.tid, studentUid, 0, -1);
+				const tids = suggestions.map(t => t.tid);
+				assert(!tids.includes(privateTopic.tid), 'Private topics should not be suggested to students');
+			});
 		});
 	});
 });

@@ -9,6 +9,7 @@ const user = require('../user');
 const categories = require('../categories');
 const meta = require('../meta');
 const plugins = require('../plugins');
+const { filterVisibleTopics } = require('./filter');
 
 module.exports = function (Topics) {
 	Topics.getSortedTopics = async function (params) {
@@ -28,11 +29,16 @@ module.exports = function (Topics) {
 		if (params.tags && !Array.isArray(params.tags)) {
 			params.tags = [params.tags];
 		}
+
 		data.tids = await getTids(params);
 		data.tids = await sortTids(data.tids, params);
 		data.tids = await filterTids(data.tids.slice(0, meta.config.recentMaxTopics), params);
 		data.topicCount = data.tids.length;
+
 		data.topics = await getTopics(data.tids, params);
+
+		data.topics = await filterVisibleTopics(data.topics, params.uid);
+
 		data.nextStart = params.stop + 1;
 		return data;
 	};
@@ -290,6 +296,15 @@ module.exports = function (Topics) {
 		tids = tids.slice(params.start, params.stop !== -1 ? params.stop + 1 : undefined);
 		const topicData = await Topics.getTopicsByTids(tids, params);
 		Topics.calculateTopicIndices(topicData, params.start);
+	
+		if (Array.isArray(topicData)) {
+			for (const topic of topicData) {
+				if (!topic) continue;
+				topic.private = parseInt(topic.private, 10) || 0;
+				topic.isAdminOrMod = await privileges.topics.isAdminOrMod(topic.tid, params.uid);
+			}
+		}
+	
 		return topicData;
 	}
 
