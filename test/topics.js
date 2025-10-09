@@ -2658,6 +2658,9 @@ describe('Topic\'s', () => {
 
 		after(async () => {
 			// Clean up test data - no need to delete users as they will be cleaned up by test framework
+		});
+	});
+
 	describe('Private Posts', () => {
 		let studentUid;
 		let studentJar;
