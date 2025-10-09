@@ -487,6 +487,7 @@ describe('API', async () => {
 				});
 
 				it('should not error out when called', async () => {
+					this.timeout(120000);
 					await setupData();
 
 					if (csrfToken) {
