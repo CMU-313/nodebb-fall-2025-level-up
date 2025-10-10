@@ -74,7 +74,7 @@ define('forum/topic/posts', [
 					userslug: '',
 					picture: '',
 					status: 'offline',
-					displayname: 'Anonymous'
+					displayname: 'Anonymous',
 				};
 			}
 
