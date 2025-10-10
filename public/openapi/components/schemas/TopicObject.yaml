@@ -254,6 +254,9 @@ TopicObjectSlim:
           type: number
           description: Whether or not this particular topic is pinned to the top of the
             category
+        anonymous:
+          type: number
+          description: Whether or not this topic is anonymous (1) or not (0)
         timestamp:
           type: number
         timestampISO:

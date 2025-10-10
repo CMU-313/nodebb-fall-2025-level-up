@@ -35,6 +35,7 @@ module.exports = function (Topics) {
 			lastposttime: 0,
 			postcount: 0,
 			viewcount: 0,
+			anonymous: data.anonymous ? 1 : 0,
 			private: data.private ? 1 : 0,
 		};
 
@@ -171,6 +172,11 @@ module.exports = function (Topics) {
 			});
 		}
 
+		// Convert anonymous field to boolean for API consistency
+		if (postData && postData.anonymous !== undefined) {
+			postData.anonymous = parseInt(postData.anonymous, 10) === 1;
+		}
+
 		return {
 			topicData: topicData,
 			postData: postData,
@@ -182,7 +188,7 @@ module.exports = function (Topics) {
 		const { tid, uid } = data;
 
 		const [topicData, isAdmin] = await Promise.all([
-			Topics.getTopicData(tid),
+			Topics.getTopicFields(tid, ['cid', 'uid', 'anonymous', 'deleted', 'locked', 'scheduled', 'pinned', 'slug', 'lastposttime']),
 			privileges.users.isAdministrator(uid),
 		]);
 
@@ -207,6 +213,14 @@ module.exports = function (Topics) {
 		}
 
 		data.ip = data.req ? data.req.ip : null;
+		
+		// Check if topic is anonymous and poster is the topic author for replies
+		const isTopicAnonymous = parseInt(topicData.anonymous, 10) === 1;
+		const isTopicAuthor = parseInt(topicData.uid, 10) === parseInt(uid, 10);
+		if (isTopicAnonymous && isTopicAuthor) {
+			data.anonymous = 1;
+		}
+		
 		let postData = await posts.create(data);
 		postData = await onNewPost(postData, data);
 
@@ -236,6 +250,11 @@ module.exports = function (Topics) {
 
 		analytics.increment(['posts', `posts:byCid:${data.cid}`]);
 		plugins.hooks.fire('action:topic.reply', { post: _.clone(postData), data: data });
+
+		// Convert anonymous field to boolean for API consistency
+		if (postData.anonymous !== undefined) {
+			postData.anonymous = parseInt(postData.anonymous, 10) === 1;
+		}
 
 		return postData;
 	};
@@ -298,7 +317,7 @@ module.exports = function (Topics) {
 	}
 
 	async function canReply(data, topicData) {
-		if (!topicData) {
+		if (!topicData || !topicData.cid) {
 			throw new Error('[[error:no-topic]]');
 		}
 		const { tid, uid } = data;

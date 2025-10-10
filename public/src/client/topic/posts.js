@@ -63,6 +63,21 @@ define('forum/topic/posts', [
 			post.selfPost = !!app.user.uid && parseInt(post.uid, 10) === parseInt(app.user.uid, 10);
 			post.topicOwnerPost = parseInt(post.uid, 10) === parseInt(ajaxify.data.uid, 10);
 
+			// Handle anonymous posts - hide identity only for non-admin users and non-self posts
+			if (post.anonymous && !ajaxify.data.privileges.isAdminOrMod && !post.selfPost) {
+				// Store original user info for reference
+				post.originalUser = post.user;
+				// Replace user info with anonymous data
+				post.user = {
+					uid: 0,
+					username: 'Anonymous',
+					userslug: '',
+					picture: '',
+					status: 'offline',
+					displayname: 'Anonymous',
+				};
+			}
+
 			post.display_edit_tools = (ajaxify.data.privileges['posts:edit'] && post.selfPost) || ajaxify.data.privileges.isAdminOrMod;
 			post.display_delete_tools = (ajaxify.data.privileges['posts:delete'] && post.selfPost) || ajaxify.data.privileges.isAdminOrMod;
 			post.display_moderator_tools = post.display_edit_tools || post.display_delete_tools;

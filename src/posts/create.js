@@ -28,7 +28,20 @@ module.exports = function (Posts) {
 		}
 
 		const pid = data.pid || await db.incrObjectField('global', 'nextPid');
+		
+		// Check if topic is anonymous and poster is the topic author
+		const topicFields = await topics.getTopicFields(tid, ['uid', 'anonymous']);
+		const isTopicAnonymous = topicFields && parseInt(topicFields.anonymous, 10) === 1;
+		const isTopicAuthor = topicFields && parseInt(topicFields.uid, 10) === parseInt(uid, 10);
+		
 		let postData = { pid, uid, tid, content, sourceContent, timestamp };
+		
+		// Set anonymous flag if topic is anonymous and user is the topic author
+		if (isTopicAnonymous && isTopicAuthor) {
+			postData.anonymous = 1;
+		} else {
+			postData.anonymous = data.anonymous ? 1 : 0;
+		}
 
 		if (data.toPid) {
 			postData.toPid = data.toPid;

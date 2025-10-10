@@ -70,10 +70,13 @@ topicsAPI.create = async function (caller, data) {
 	const payload = { ...data };
 	delete payload.tid;
 	payload.tags = payload.tags || [];
-
+  
 	// Add private flag from composer (default: false)
 	payload.private = !!data.private;
-
+	
+	// Add anonymous flag from composer (default: false)
+	payload.anonymous = !!data.anonymous;
+	
 	apiHelpers.setDefaultPostData(caller, payload);
 	const isScheduling = parseInt(data.timestamp, 10) > payload.timestamp;
 	if (isScheduling) {

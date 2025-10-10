@@ -83,4 +83,52 @@ utils.getFontawesomeVersion = function () {
 	return packageJson.version;
 };
 
+utils.generateAnonymousName = function (uid, tid) {
+	// Load adjectives and animals from JSON file (similar to how language files are loaded)
+	let adjectives, animals;
+	try {
+		const data = require('./animals.json');
+		adjectives = data.adjectives || [];
+		animals = data.animals || [];
+	} catch (err) {
+		// Fallback to basic sets if file doesn't exist
+		adjectives = [
+			'Swift', 'Brave', 'Clever', 'Noble', 'Fierce',
+			'Gentle', 'Mighty', 'Wise', 'Bold', 'Calm',
+			'Quick', 'Strong', 'Silent', 'Bright', 'Dark',
+			'Golden', 'Silver', 'Crimson', 'Azure', 'Emerald',
+		];
+		animals = [
+			'Fox', 'Panda', 'Tiger', 'Owl', 'Dolphin',
+			'Hedgehog', 'Falcon', 'Penguin', 'Wolf', 'Koala',
+			'Rabbit', 'Eagle', 'Lion', 'Bear', 'Giraffe',
+			'Zebra', 'Cheetah', 'Leopard', 'Kangaroo', 'Elephant',
+			'Phoenix', 'Dragon', 'Unicorn', 'Griffin', 'Hydra',
+		];
+	}
+	
+	// If uid and tid are provided, generate consistent name based on them
+	if (uid && tid) {
+		// Create a string-based hash for better distribution
+		const str = `${uid}_${tid}`;
+		let hash = 0;
+		for (let i = 0; i < str.length; i++) {
+			hash = ((hash * 31) + str.charCodeAt(i)) % 1000000;
+		}
+		
+		// Use different parts of the hash for adjective and animal
+		const adjIndex = Math.abs(hash) % adjectives.length;
+		const animalIndex = Math.abs(Math.floor(hash / adjectives.length)) % animals.length;
+		
+		const adjective = adjectives[adjIndex];
+		const animal = animals[animalIndex];
+		return `Anonymous ${adjective} ${animal}`;
+	}
+	
+	// Fallback to random for backward compatibility
+	const randomAdj = adjectives[Math.floor(Math.random() * adjectives.length)];
+	const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
+	return `Anonymous ${randomAdj} ${randomAnimal}`;
+};
+
 module.exports = utils;

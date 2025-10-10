@@ -85,6 +85,9 @@ get:
                                             timestampISO:
                                               type: string
                                               description: An ISO 8601 formatted date string (complementing `timestamp`)
+                                            anonymous:
+                                              type: number
+                                              description: Whether the post is anonymous (1) or not (0)
                                             user:
                                               type: object
                                               properties:
@@ -113,6 +116,19 @@ get:
                                                     with `icon:text` for the user's
                                                     auto-generated icon
                                                   example: "#f44336"
+                                                isLocal:
+                                                  type: boolean
+                                                  description: Whether the user belongs to the local installation or not.
+                                                anonymous:
+                                                  type: boolean
+                                                  description: Whether the user should be displayed as anonymous
+                                              required:
+                                                - uid
+                                                - username
+                                                - userslug
+                                                - picture
+                                                - icon:text
+                                                - icon:bgColor
                                             index:
                                               type: number
                                             cid:
@@ -152,6 +168,9 @@ get:
                                   timestampISO:
                                     type: string
                                     description: An ISO 8601 formatted date string (complementing `timestamp`)
+                                  anonymous:
+                                    type: number
+                                    description: Whether the post is anonymous (1) or not (0)
                                   user:
                                     type: object
                                     properties:
@@ -161,6 +180,9 @@ get:
                                       isLocal:
                                         type: boolean
                                         description: Whether the user belongs to the local installation or not.
+                                      anonymous:
+                                        type: boolean
+                                        description: Whether the user should be displayed as anonymous
                                       username:
                                         type: string
                                         description: A friendly name for a given user account
@@ -186,6 +208,15 @@ get:
                                           `icon:text` for the user's
                                           auto-generated icon
                                         example: "#f44336"
+                                    required:
+                                      - uid
+                                      - username
+                                      - displayname
+                                      - userslug
+                                      - picture
+                                      - icon:text
+                                      - icon:bgColor
+                                      - isLocal
                                   index:
                                     type: number
                                   cid:
@@ -261,6 +292,18 @@ get:
                                       'icon:bgColor':
                                         type: string
                                         example: '#9c27b0'
+                                      anonymous:
+                                        type: boolean
+                                        description: Whether the user should be displayed as anonymous
+                                  required:
+                                    - uid
+                                    - isLocal
+                                    - username
+                                    - userslug
+                                    - picture
+                                    - displayname
+                                    - icon:text
+                                    - icon:bgColor
                             imageClass:
                               type: string
               - $ref: ../components/schemas/Pagination.yaml#/Pagination

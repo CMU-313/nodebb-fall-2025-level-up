@@ -2,6 +2,7 @@
 
 const _ = require('lodash');
 const validator = require('validator');
+const nconf = require('nconf');
 
 const db = require('../database');
 const posts = require('../posts');
@@ -132,12 +133,13 @@ Topics.getTopicsByTids = async function (tids, options) {
 		};
 	}
 
-	const [result, hasRead, followData, bookmarks, callerSettings] = await Promise.all([
+	const [result, hasRead, followData, bookmarks, callerSettings, isViewerAdmin] = await Promise.all([
 		loadTopics(),
 		Topics.hasReadTopics(tids, uid),
 		Topics.getFollowData(tids, uid),
 		Topics.getUserBookmarks(tids, uid),
 		user.getSettings(uid),
+		user.isAdministrator(uid),
 	]);
 
 	const sortNewToOld = callerSettings.topicPostSort === 'newest_to_oldest';
@@ -151,6 +153,26 @@ Topics.getTopicsByTids = async function (tids, options) {
 				topic.user.displayname = topic.user.username;
 			}
 
+			// Handle anonymous topics - check if topic author should be displayed as anonymous
+			const isAnonymous = parseInt(topic.anonymous, 10) === 1;
+			const isTopicAuthor = parseInt(uid, 10) === parseInt(topic.uid, 10);
+			if (isAnonymous && !isViewerAdmin && !isTopicAuthor) {
+				// Replace topic author with anonymous user for non-admin/non-author viewers
+				const anonymousName = utils.generateAnonymousName(topic.uid, topic.tid);
+				topic.user = {
+					uid: 0,
+					username: anonymousName,
+					userslug: '',
+					picture: nconf.get('relative_path') + '/assets/images/anonymous-avatar.png',
+					status: 'offline',
+					displayname: anonymousName,
+					fullname: undefined,
+					reputation: 0,
+					postcount: 0,
+					signature: '',
+					banned: 0,
+				};
+			}
 			topic.teaser = result.teasers[i] || null;
 			topic.isOwner = topic.uid === parseInt(uid, 10);
 			topic.ignored = followData[i].ignoring;

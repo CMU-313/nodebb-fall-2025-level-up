@@ -2,13 +2,14 @@
 'use strict';
 
 const _ = require('lodash');
+const nconf = require('nconf');
 
 const db = require('../database');
 const meta = require('../meta');
 const user = require('../user');
 const posts = require('../posts');
-const plugins = require('../plugins');
 const utils = require('../utils');
+const plugins = require('../plugins');
 
 module.exports = function (Topics) {
 	Topics.getTeasers = async function (topics, options) {
@@ -42,9 +43,10 @@ module.exports = function (Topics) {
 			}
 		});
 
-		const [allPostData, callerSettings] = await Promise.all([
-			posts.getPostsFields(teaserPids, ['pid', 'uid', 'timestamp', 'tid', 'content', 'sourceContent']),
+		const [allPostData, callerSettings, isViewerAdmin] = await Promise.all([
+			posts.getPostsFields(teaserPids, ['pid', 'uid', 'timestamp', 'tid', 'content', 'sourceContent', 'anonymous']),
 			user.getSettings(uid),
+			user.isAdministrator(uid),
 		]);
 		let postData = allPostData.filter(post => post && post.pid);
 		postData = await handleBlocks(uid, postData);
@@ -64,7 +66,25 @@ module.exports = function (Topics) {
 				post.uid = 0;
 			}
 
-			post.user = users[post.uid];
+			// Handle anonymous posts - check if post should be displayed as anonymous
+			const isAnonymous = parseInt(post.anonymous, 10) === 1;
+			const isPostAuthor = parseInt(uid, 10) === parseInt(post.uid, 10);
+			if (isAnonymous && !isViewerAdmin && !isPostAuthor) {
+				// Store original uid for admin reference
+				post.originalUid = post.uid;
+				const anonymousName = utils.generateAnonymousName(post.uid, post.tid);
+				post.user = {
+					uid: 0,
+					username: anonymousName,
+					userslug: '',
+					picture: nconf.get('relative_path') + '/assets/images/anonymous-avatar.png',
+					status: 'offline',
+					displayname: anonymousName,
+				};
+			} else {
+				post.user = users[post.uid];
+			}
+
 			post.timestampISO = utils.toISOString(post.timestamp);
 			tidToPost[post.tid] = post;
 		});
@@ -131,7 +151,7 @@ module.exports = function (Topics) {
 				const mainPid = await Topics.getTopicField(postData.tid, 'mainPid');
 				pids = [mainPid];
 			}
-			const prevPosts = await posts.getPostsFields(pids, ['pid', 'uid', 'timestamp', 'tid', 'content']);
+			const prevPosts = await posts.getPostsFields(pids, ['pid', 'uid', 'timestamp', 'tid', 'content', 'anonymous']);
 			isBlocked = prevPosts.every(checkBlocked);
 			start += postsPerIteration;
 			stop = start + postsPerIteration - 1;

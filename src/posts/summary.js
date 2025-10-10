@@ -22,7 +22,7 @@ module.exports = function (Posts) {
 		options.escape = options.hasOwnProperty('escape') ? options.escape : false;
 		options.extraFields = options.hasOwnProperty('extraFields') ? options.extraFields : [];
 
-		const fields = ['pid', 'tid', 'toPid', 'url', 'content', 'sourceContent', 'uid', 'timestamp', 'deleted', 'upvotes', 'downvotes', 'replies', 'handle'].concat(options.extraFields);
+		const fields = ['pid', 'tid', 'toPid', 'url', 'content', 'sourceContent', 'uid', 'timestamp', 'deleted', 'upvotes', 'downvotes', 'replies', 'handle', 'anonymous'].concat(options.extraFields);
 
 		let posts = await Posts.getPostsFields(pids, fields);
 		posts = posts.filter(Boolean);
@@ -40,7 +40,9 @@ module.exports = function (Posts) {
 		const tidToTopic = toObject('tid', topicsAndCategories.topics);
 		const cidToCategory = toObject('cid', topicsAndCategories.categories);
 
-		posts.forEach((post) => {
+		const privileges = require('../privileges');
+		
+		await Promise.all(posts.map(async (post) => {
 			// If the post author isn't represented in the retrieved users' data,
 			// then it means they were deleted, assume guest.
 			if (!uidToUser.hasOwnProperty(post.uid)) {
@@ -50,8 +52,30 @@ module.exports = function (Posts) {
 			// toPid is nullable so it is casted separately
 			post.toPid = utils.isNumber(post.toPid) ? parseInt(post.toPid, 10) : post.toPid;
 
-			post.user = uidToUser[post.uid];
-			Posts.overrideGuestHandle(post, post.handle);
+			// Handle anonymous posts
+			const isAnonymous = parseInt(post.anonymous, 10) === 1;
+			const isPostAuthor = parseInt(uid, 10) === parseInt(post.uid, 10);
+			
+			// Check if viewer is admin or mod for this topic
+			const isViewerAdminOrMod = await privileges.topics.isAdminOrMod(post.tid, uid);
+			
+			if (isAnonymous && !isViewerAdminOrMod && !isPostAuthor) {
+				// Create anonymous user object for non-admin users and non-authors
+				const anonymousName = utils.generateAnonymousName(post.uid, post.tid);
+				post.user = {
+					uid: 0,
+					username: anonymousName,
+					userslug: '',
+					picture: require('nconf').get('relative_path') + '/assets/images/anonymous-avatar.png',
+					status: 'offline',
+					displayname: anonymousName,
+				};
+				// Store original uid for admin reference if needed
+				post.originalUid = post.uid;
+			} else {
+				post.user = uidToUser[post.uid];
+				Posts.overrideGuestHandle(post, post.handle);
+			}
 			post.handle = undefined;
 			post.topic = tidToTopic[post.tid];
 			post.category = post.topic && cidToCategory[post.topic.cid];
@@ -63,7 +87,7 @@ module.exports = function (Posts) {
 			if (utils.isNumber(post.pid)) {
 				post.url = `${nconf.get('url')}/post/${post.pid}`;
 			}
-		});
+		}));
 
 		posts = posts.filter(post => tidToTopic[post.tid]);
 
