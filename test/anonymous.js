@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('assert');
+const nconf = require('nconf');
 const db = require('./mocks/databasemock');
 const topics = require('../src/topics');
 const posts = require('../src/posts');
@@ -519,7 +520,7 @@ describe('Anonymous Posting', () => {
 					// Non-admin users should see anonymized data (unless they're the author)
 					if (parseInt(anonymousPost.originalUid || anonymousPost.user.uid, 10) !== moderatorUid) {
 						assert(anonymousPost.user.username.startsWith('Anonymous '), 'Non-admin should see Anonymous username pattern');
-						assert.strictEqual(anonymousPost.user.picture, '/assets/images/anonymous-avatar.png', 'Non-admin should see anonymous avatar');
+						assert.strictEqual(anonymousPost.user.picture, (nconf.get('relative_path') || '') + '/assets/images/anonymous-avatar.png', 'Non-admin should see anonymous avatar');
 					}
 				}
 			}
@@ -569,7 +570,7 @@ describe('Anonymous Posting', () => {
 			assert.strictEqual(anonymousTopicRegular.user.uid, 0);
 			assert(anonymousTopicRegular.user.username.startsWith('Anonymous '), 'Username should start with "Anonymous "');
 			assert.strictEqual(anonymousTopicRegular.user.userslug, '');
-			assert.strictEqual(anonymousTopicRegular.user.picture, '/assets/images/anonymous-avatar.png');
+			assert.strictEqual(anonymousTopicRegular.user.picture, (nconf.get('relative_path') || '') + '/assets/images/anonymous-avatar.png');
 			assert(anonymousTopicRegular.user.displayname.startsWith('Anonymous '), 'Displayname should start with "Anonymous "');
 		});
 
@@ -630,7 +631,7 @@ describe('Anonymous Posting', () => {
 			assert.strictEqual(regularMainPost.user.uid, 0, 'Non-admin should see anonymous UID');
 			assert(regularMainPost.user.username.startsWith('Anonymous '), 'Non-admin should see Anonymous username pattern');
 			assert.strictEqual(regularMainPost.user.userslug, '', 'Non-admin should see empty userslug');
-			assert.strictEqual(regularMainPost.user.picture, '/assets/images/anonymous-avatar.png', 'Non-admin should see anonymous avatar');
+			assert.strictEqual(regularMainPost.user.picture, (nconf.get('relative_path') || '') + '/assets/images/anonymous-avatar.png', 'Non-admin should see anonymous avatar');
 			assert(regularMainPost.user.displayname.startsWith('Anonymous '), 'Non-admin should see Anonymous displayname pattern');
 
 			// The reply from the same user should also be anonymous to non-admin viewers
@@ -672,7 +673,7 @@ describe('Anonymous Posting', () => {
 			assert.strictEqual(parseInt(regularSummary.anonymous, 10), 1, 'Post should be marked as anonymous');
 			assert.strictEqual(regularSummary.user.uid, 0, 'Non-admin should see anonymous UID');
 			assert(regularSummary.user.username.startsWith('Anonymous '), 'Non-admin should see Anonymous username pattern');
-			assert.strictEqual(regularSummary.user.picture, '/assets/images/anonymous-avatar.png', 'Non-admin should see anonymous avatar');
+			assert.strictEqual(regularSummary.user.picture, (nconf.get('relative_path') || '') + '/assets/images/anonymous-avatar.png', 'Non-admin should see anonymous avatar');
 		});
 	});
 
