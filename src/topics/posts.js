@@ -145,13 +145,14 @@ module.exports = function (Topics) {
 				if (isAnonymous && !isViewerAdminOrMod && !isPostAuthor) {
 					// Store original uid for admin reference
 					postObj.originalUid = postObj.uid;
+					const anonymousName = utils.generateAnonymousName(postObj.uid, postObj.tid);
 					postObj.user = {
 						uid: 0,
-						username: 'Anonymous',
+						username: anonymousName,
 						userslug: '',
-						picture: '',
+						picture: require('nconf').get('relative_path') + '/assets/images/anonymous-avatar.png',
 						status: 'offline',
-						displayname: 'Anonymous'
+						displayname: anonymousName,
 					};
 				} else {
 					postObj.user = postObj.uid ? userData[postObj.uid] : { ...userData[postObj.uid] };

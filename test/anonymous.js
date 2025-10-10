@@ -12,12 +12,14 @@ const helpers = require('./helpers');
 const apiTopics = require('../src/api/topics');
 const apiPosts = require('../src/api/posts');
 const composer = require('../src/controllers/composer');
+const utils = require('../src/utils');
 
 describe('Anonymous Posting', () => {
 	let categoryObj;
 	let adminUid;
 	let regularUid;
 	let moderatorUid;
+	let otherUserUid;
 	let adminJar;
 	let csrf_token;
 
@@ -26,6 +28,7 @@ describe('Anonymous Posting', () => {
 		adminUid = await User.create({ username: 'admin_anon', password: '123456' });
 		regularUid = await User.create({ username: 'regular_anon', password: '123456' });
 		moderatorUid = await User.create({ username: 'mod_anon', password: '123456' });
+		otherUserUid = await User.create({ username: 'other_anon', password: '123456' });
 
 		// Set up user groups
 		await groups.join('administrators', adminUid);
@@ -239,25 +242,30 @@ describe('Anonymous Posting', () => {
 	});
 
 	describe('Anonymous Name Generation', () => {
-		it('should generate anonymous names with animal format', () => {
+		it('should generate anonymous names with adjective and animal format', () => {
 			// Test the generateAnonymousName function directly
-			const name1 = composer.generateAnonymousName();
-			const name2 = composer.generateAnonymousName();
+			const name1 = utils.generateAnonymousName(1, 100);
+			const name2 = utils.generateAnonymousName(1, 100);
 			
 			// Names should start with "Anonymous "
-			assert(name1.startsWith('Anonymous '));
-			assert(name2.startsWith('Anonymous '));
+			assert(name1.startsWith('Anonymous '), 'Name should start with "Anonymous "');
+			assert(name2.startsWith('Anonymous '), 'Name should start with "Anonymous "');
 			
-			// Names should have an animal after "Anonymous "
-			const animal1 = name1.replace('Anonymous ', '');
-			const animal2 = name2.replace('Anonymous ', '');
+			// Names should have adjective and animal after "Anonymous "
+			const parts1 = name1.split(' ');
+			const parts2 = name2.split(' ');
 			
-			assert(animal1.length > 0);
-			assert(animal2.length > 0);
+			assert.strictEqual(parts1.length, 3, 'Name should have 3 parts: Anonymous, Adjective, Animal');
+			assert.strictEqual(parts2.length, 3, 'Name should have 3 parts: Anonymous, Adjective, Animal');
+			assert(parts1[1].length > 0, 'Should have adjective');
+			assert(parts1[2].length > 0, 'Should have animal name');
 			
-			// Should be valid animal names (no spaces or special characters)
-			assert(/^[A-Za-z]+$/.test(animal1));
-			assert(/^[A-Za-z]+$/.test(animal2));
+			// Same uid/tid should generate same name
+			assert.strictEqual(name1, name2);
+			
+			// Should be valid adjective and animal names (letters/numbers/basic chars)
+			assert(/^[A-Za-z0-9]+$/.test(parts1[1]), 'Adjective should be valid');
+			assert(/^[A-Za-z0-9]+$/.test(parts1[2]), 'Animal should be valid');
 		});
 
 		it('should generate different anonymous names on multiple calls', () => {
@@ -265,18 +273,38 @@ describe('Anonymous Posting', () => {
 			
 			// Generate 20 names and check for some variety
 			for (let i = 0; i < 20; i++) {
-				names.add(composer.generateAnonymousName());
+				names.add(utils.generateAnonymousName());
 			}
 			
 			// Should have at least some variety (not all the same)
 			assert(names.size > 1);
 		});
 
-		it('should always follow the "Anonymous [Animal]" pattern', () => {
+		it('should always follow the "Anonymous [Adjective] [Animal]" pattern', () => {
 			for (let i = 0; i < 10; i++) {
-				const name = composer.generateAnonymousName();
-				assert(/^Anonymous [A-Za-z]+$/.test(name));
+				const name = utils.generateAnonymousName();
+				assert(name.startsWith('Anonymous '), 'Name should start with "Anonymous "');
+				const parts = name.split(' ');
+				assert.strictEqual(parts.length, 3, 'Name should have exactly 3 parts: Anonymous, Adjective, Animal');
+				assert.strictEqual(parts[0], 'Anonymous', 'First part should be "Anonymous"');
+				assert(parts[1].length > 0, 'Should have adjective');
+				assert(parts[2].length > 0, 'Should have animal name');
 			}
+		});
+
+		it('should generate consistent names for same uid/tid combination', () => {
+			// Same user in same topic should always get same anonymous name
+			const name1 = utils.generateAnonymousName(1, 100);
+			const name2 = utils.generateAnonymousName(1, 100);
+			assert.strictEqual(name1, name2, 'Same uid/tid should generate same anonymous name');
+
+			// Different users in same topic should get different names
+			const name3 = utils.generateAnonymousName(2, 100);
+			assert.notStrictEqual(name1, name3, 'Different users should get different names');
+
+			// Same user in different topics should get different names  
+			const name4 = utils.generateAnonymousName(1, 200);
+			assert.notStrictEqual(name1, name4, 'Same user in different topics should get different names');
 		});
 	});
 
@@ -440,6 +468,211 @@ describe('Anonymous Posting', () => {
 			// Find anonymous topics in the list
 			const anonymousTopics = categoryData.topics.filter(topic => parseInt(topic.anonymous, 10) === 1);
 			assert(anonymousTopics.length > 0, 'Should find anonymous topics in category listing');
+		});
+
+		it('should anonymize user data in category recent posts/teasers for non-admin users', async () => {
+			// Create an anonymous topic with replies to generate recent posts/teasers
+			const topicData = await topics.post({
+				uid: regularUid,
+				cid: categoryObj.cid,
+				title: 'Anonymous Teaser Test',
+				content: 'Anonymous topic for teaser testing',
+				anonymous: 1,
+			});
+
+			// Add a reply to generate a teaser
+			await topics.reply({
+				uid: regularUid,
+				tid: topicData.topicData.tid,
+				content: 'Anonymous reply for teaser',
+			});
+
+			// Get category data which includes recent posts/teasers
+			const categoryData = await categories.getCategoryById({
+				cid: categoryObj.cid,
+				uid: adminUid, // Use different user (admin) to view
+				start: 0,
+				stop: 19,
+			});
+
+			// Check if there are recent posts in the category
+			if (categoryData.posts && categoryData.posts.length > 0) {
+				const anonymousPost = categoryData.posts.find(post => parseInt(post.anonymous, 10) === 1);
+				if (anonymousPost) {
+					// Admin should see real user data
+					assert.notStrictEqual(anonymousPost.user.uid, 0, 'Admin should see real user data');
+					assert.strictEqual(parseInt(anonymousPost.user.uid, 10), regularUid);
+				}
+			}
+
+			// Now test with a non-admin user
+			const categoryDataForRegular = await categories.getCategoryById({
+				cid: categoryObj.cid,
+				uid: moderatorUid, // Use non-admin user
+				start: 0,
+				stop: 19,
+			});
+
+			if (categoryDataForRegular.posts && categoryDataForRegular.posts.length > 0) {
+				const anonymousPost = categoryDataForRegular.posts.find(post => parseInt(post.anonymous, 10) === 1);
+				if (anonymousPost) {
+					// Non-admin users should see anonymized data (unless they're the author)
+					if (parseInt(anonymousPost.originalUid || anonymousPost.user.uid, 10) !== moderatorUid) {
+						assert(anonymousPost.user.username.startsWith('Anonymous '), 'Non-admin should see Anonymous username pattern');
+						assert.strictEqual(anonymousPost.user.picture, '/assets/images/anonymous-avatar.png', 'Non-admin should see anonymous avatar');
+					}
+				}
+			}
+		});
+
+		it('should anonymize topic authors in category topic listings for non-admin users', async () => {
+			// Create an anonymous topic
+			const topicData = await topics.post({
+				uid: regularUid,
+				cid: categoryObj.cid,
+				title: 'Anonymous Author Test',
+				content: 'Anonymous topic author testing',
+				anonymous: 1,
+			});
+
+			// Get category topics as admin (should see real user data)
+			const categoryDataAdmin = await categories.getCategoryById({
+				cid: categoryObj.cid,
+				uid: adminUid,
+				start: 0,
+				stop: 19,
+			});
+
+			const anonymousTopicAdmin = categoryDataAdmin.topics.find(
+				t => t.tid === topicData.topicData.tid
+			);
+			assert(anonymousTopicAdmin, 'Should find anonymous topic in category listing');
+			assert.strictEqual(parseInt(anonymousTopicAdmin.anonymous, 10), 1);
+			// Admin should see real user data
+			assert.strictEqual(parseInt(anonymousTopicAdmin.user.uid, 10), regularUid);
+			assert.strictEqual(anonymousTopicAdmin.user.username, 'regular_anon');
+
+			// Get category topics as non-admin user (should see anonymized data)
+			const categoryDataRegular = await categories.getCategoryById({
+				cid: categoryObj.cid,
+				uid: moderatorUid, // Different user viewing
+				start: 0,
+				stop: 19,
+			});
+
+			const anonymousTopicRegular = categoryDataRegular.topics.find(
+				t => t.tid === topicData.topicData.tid
+			);
+			assert(anonymousTopicRegular, 'Should find anonymous topic in category listing');
+			assert.strictEqual(parseInt(anonymousTopicRegular.anonymous, 10), 1);
+			// Non-admin should see anonymized user data
+			assert.strictEqual(anonymousTopicRegular.user.uid, 0);
+			assert(anonymousTopicRegular.user.username.startsWith('Anonymous '), 'Username should start with "Anonymous "');
+			assert.strictEqual(anonymousTopicRegular.user.userslug, '');
+			assert.strictEqual(anonymousTopicRegular.user.picture, '/assets/images/anonymous-avatar.png');
+			assert(anonymousTopicRegular.user.displayname.startsWith('Anonymous '), 'Displayname should start with "Anonymous "');
+		});
+
+		it('should anonymize user data in topic view for non-admin users', async () => {
+			// Create an anonymous topic
+			const topicData = await topics.post({
+				uid: regularUid,
+				cid: categoryObj.cid,
+				title: 'Anonymous Topic View Test',
+				content: 'Anonymous topic content for testing topic view',
+				anonymous: 1,
+			});
+
+			// Add some replies
+			const reply1 = await topics.reply({
+				uid: regularUid,
+				tid: topicData.topicData.tid,
+				content: 'First anonymous reply',
+			});
+
+			const reply2 = await topics.reply({
+				uid: moderatorUid,
+				tid: topicData.topicData.tid,
+				content: 'Regular reply from moderator',
+			});
+
+			// Get topic with posts as admin (should see real user data)
+			const topicWithPostsAdmin = await topics.getTopicWithPosts(
+				topicData.topicData,
+				`tid:${topicData.topicData.tid}:posts`,
+				adminUid,
+				0,
+				-1,
+				false
+			);
+
+			// Admin should see real user data for anonymous posts
+			const adminMainPost = topicWithPostsAdmin.posts.find(p => p.pid === topicData.postData.pid);
+			assert(adminMainPost, 'Should find main post');
+			assert.strictEqual(parseInt(adminMainPost.anonymous, 10), 1, 'Post should be marked as anonymous');
+			assert.strictEqual(parseInt(adminMainPost.user.uid, 10), regularUid, 'Admin should see real user ID');
+			assert.strictEqual(adminMainPost.user.username, 'regular_anon', 'Admin should see real username');
+
+			// Get topic with posts as non-admin user (should see anonymized data)
+			const topicWithPostsRegular = await topics.getTopicWithPosts(
+				topicData.topicData,
+				`tid:${topicData.topicData.tid}:posts`,
+				otherUserUid,
+				0,
+				-1,
+				false
+			);
+
+			// Non-admin should see anonymized user data for anonymous posts
+			const regularMainPost = topicWithPostsRegular.posts.find(p => p.pid === topicData.postData.pid);
+			assert(regularMainPost, 'Should find main post');
+			assert.strictEqual(parseInt(regularMainPost.anonymous, 10), 1, 'Post should be marked as anonymous');
+			assert.strictEqual(regularMainPost.user.uid, 0, 'Non-admin should see anonymous UID');
+			assert(regularMainPost.user.username.startsWith('Anonymous '), 'Non-admin should see Anonymous username pattern');
+			assert.strictEqual(regularMainPost.user.userslug, '', 'Non-admin should see empty userslug');
+			assert.strictEqual(regularMainPost.user.picture, '/assets/images/anonymous-avatar.png', 'Non-admin should see anonymous avatar');
+			assert(regularMainPost.user.displayname.startsWith('Anonymous '), 'Non-admin should see Anonymous displayname pattern');
+
+			// The reply from the same user should also be anonymous to non-admin viewers
+			const regularReply1 = topicWithPostsRegular.posts.find(p => p.pid === reply1.pid);
+			assert(regularReply1, 'Should find first reply');
+			assert.strictEqual(parseInt(regularReply1.anonymous, 10), 1, 'Reply should be anonymous (inherited from topic)');
+			assert(regularReply1.user.username.startsWith('Anonymous '), 'Reply should show Anonymous username pattern');
+
+			// But the regular reply should show normal user data
+			const regularReply2 = topicWithPostsRegular.posts.find(p => p.pid === reply2.pid);
+			assert(regularReply2, 'Should find second reply');
+			assert.strictEqual(parseInt(regularReply2.anonymous, 10), 0, 'Regular reply should not be anonymous');
+			assert.strictEqual(regularReply2.user.username, 'mod_anon', 'Regular reply should show real username');
+		});
+
+		it('should anonymize user data in post summaries for non-admin users', async () => {
+			// Create an anonymous post
+			const topicData = await topics.post({
+				uid: regularUid,
+				cid: categoryObj.cid,
+				title: 'Anonymous Summary Test',
+				content: 'Anonymous post for summary testing',
+				anonymous: 1,
+			});
+
+			// Get post summaries as admin
+			const summariesAdmin = await posts.getPostSummaryByPids([topicData.postData.pid], adminUid, { stripTags: false });
+			assert(summariesAdmin.length > 0, 'Should get post summaries');
+			const adminSummary = summariesAdmin[0];
+			assert.strictEqual(parseInt(adminSummary.anonymous, 10), 1, 'Post should be marked as anonymous');
+			assert.strictEqual(parseInt(adminSummary.user.uid, 10), regularUid, 'Admin should see real user data');
+
+			// Get post summaries as non-admin
+			const summariesRegular = await posts.getPostSummaryByPids(
+				[topicData.postData.pid], otherUserUid, { stripTags: false }
+			);
+			assert(summariesRegular.length > 0, 'Should get post summaries');
+			const regularSummary = summariesRegular[0];
+			assert.strictEqual(parseInt(regularSummary.anonymous, 10), 1, 'Post should be marked as anonymous');
+			assert.strictEqual(regularSummary.user.uid, 0, 'Non-admin should see anonymous UID');
+			assert(regularSummary.user.username.startsWith('Anonymous '), 'Non-admin should see Anonymous username pattern');
+			assert.strictEqual(regularSummary.user.picture, '/assets/images/anonymous-avatar.png', 'Non-admin should see anonymous avatar');
 		});
 	});
 

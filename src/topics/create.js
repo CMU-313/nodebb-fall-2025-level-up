@@ -171,6 +171,11 @@ module.exports = function (Topics) {
 			});
 		}
 
+		// Convert anonymous field to boolean for API consistency
+		if (postData && postData.anonymous !== undefined) {
+			postData.anonymous = parseInt(postData.anonymous, 10) === 1;
+		}
+
 		return {
 			topicData: topicData,
 			postData: postData,
@@ -244,6 +249,11 @@ module.exports = function (Topics) {
 
 		analytics.increment(['posts', `posts:byCid:${data.cid}`]);
 		plugins.hooks.fire('action:topic.reply', { post: _.clone(postData), data: data });
+
+		// Convert anonymous field to boolean for API consistency
+		if (postData.anonymous !== undefined) {
+			postData.anonymous = parseInt(postData.anonymous, 10) === 1;
+		}
 
 		return postData;
 	};

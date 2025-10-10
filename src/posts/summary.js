@@ -53,21 +53,22 @@ module.exports = function (Posts) {
 			post.toPid = utils.isNumber(post.toPid) ? parseInt(post.toPid, 10) : post.toPid;
 
 			// Handle anonymous posts
-			post.anonymous = parseInt(post.anonymous, 10) === 1;
+			const isAnonymous = parseInt(post.anonymous, 10) === 1;
 			const isPostAuthor = parseInt(uid, 10) === parseInt(post.uid, 10);
 			
 			// Check if viewer is admin or mod for this topic
 			const isViewerAdminOrMod = await privileges.topics.isAdminOrMod(post.tid, uid);
 			
-			if (post.anonymous && !isViewerAdminOrMod && !isPostAuthor) {
+			if (isAnonymous && !isViewerAdminOrMod && !isPostAuthor) {
 				// Create anonymous user object for non-admin users and non-authors
+				const anonymousName = utils.generateAnonymousName(post.uid, post.tid);
 				post.user = {
 					uid: 0,
-					username: 'Anonymous',
+					username: anonymousName,
 					userslug: '',
-					picture: '',
+					picture: require('nconf').get('relative_path') + '/assets/images/anonymous-avatar.png',
 					status: 'offline',
-					displayname: 'Anonymous'
+					displayname: anonymousName,
 				};
 				// Store original uid for admin reference if needed
 				post.originalUid = post.uid;
