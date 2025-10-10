@@ -20,6 +20,11 @@ get:
                     type: array
                     items:
                       $ref: ../components/schemas/TopicObject.yaml#/TopicObject
+                    properties:
+                      private:
+                        type: integer
+                        enum: [0, 1]
+                        description: Whether the topic is private (1 = private, 0 = public)
                   tids:
                     type: array
                     items:

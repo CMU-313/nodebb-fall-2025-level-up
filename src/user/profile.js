@@ -241,27 +241,37 @@ module.exports = function (User) {
 	}
 
 	function isGroupTitleValid(data) {
-		function checkTitle(title) {
-			if (title === 'registered-users' || groups.isPrivilegeGroup(title)) {
-				throw new Error('[[error:invalid-group-title]]');
+		if (!data.groupTitle) return;
+	
+		const titles = parseGroupTitles(data.groupTitle);
+		validateGroupTitles(titles);
+	
+		if (!meta.config.allowMultipleBadges && titles.length > 1) {
+			data.groupTitle = JSON.stringify(titles[0]);
+		}
+	}
+	
+	function parseGroupTitles(raw) {
+		if (typeof raw === 'string' && validator.isJSON(raw)) {
+			try {
+				const parsed = JSON.parse(raw);
+				if (Array.isArray(parsed)) {
+					return parsed;
+				}
+			} catch {
 			}
 		}
-		if (!data.groupTitle) {
-			return;
+		if (Array.isArray(raw)) {
+			return raw;
 		}
-		let groupTitles = [];
-		if (validator.isJSON(data.groupTitle)) {
-			groupTitles = JSON.parse(data.groupTitle);
-			if (!Array.isArray(groupTitles)) {
+		return [raw];
+	}
+	
+	function validateGroupTitles(titles) {
+		for (const t of titles) {
+			if (t === 'registered-users' || groups.isPrivilegeGroup(t)) {
 				throw new Error('[[error:invalid-group-title]]');
 			}
-			groupTitles.forEach(title => checkTitle(title));
-		} else {
-			groupTitles = [data.groupTitle];
-			checkTitle(data.groupTitle);
-		}
-		if (!meta.config.allowMultipleBadges && groupTitles.length > 1) {
-			data.groupTitle = JSON.stringify(groupTitles[0]);
 		}
 	}
 

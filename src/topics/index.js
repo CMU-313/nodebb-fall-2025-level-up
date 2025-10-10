@@ -104,12 +104,24 @@ Topics.getTopicsByTids = async function (tids, options) {
 			Topics.thumbs.load(topics),
 		]);
 
+		// Check admin status for instructor taglines
+		const adminStatuses = await Promise.all(uids.map(async (uid) => {
+			return user.isAdministrator ? await user.isAdministrator(uid) : false;
+		}));
+
 		users.forEach((userObj, idx) => {
 			// Hide fullname if needed
 			if (!userSettings[idx].showfullname) {
 				userObj.fullname = undefined;
 			}
+
+			// Add instructor tagline if user is an administrator
+			if (adminStatuses[idx]) {
+				userObj.custom_profile_info = userObj.custom_profile_info || [];
+				userObj.custom_profile_info.unshift({ content: '<span class="badge bg-primary ms-1 instructor-tag">Instructor</span>' });
+			}
 		});
+
 
 		return {
 			topics,
@@ -178,6 +190,15 @@ Topics.getTopicsByTids = async function (tids, options) {
 	const filteredTopics = result.topics.filter(topic => topic && topic.category && !topic.category.disabled);
 
 	const hookResult = await plugins.hooks.fire('filter:topics.get', { topics: filteredTopics, uid: uid });
+
+	if (Array.isArray(hookResult.topics)) {
+		await Promise.all(hookResult.topics.map(async (topic) => {
+			if (!topic) return;
+			topic.private = parseInt(topic.private, 10) || 0;
+			topic.isAdminOrMod = await privileges.topics.isAdminOrMod(topic.tid, uid);
+		}));
+	}
+	
 	return hookResult.topics;
 };
 
@@ -351,6 +372,33 @@ Topics.search = async function (tid, term) {
 		ids: [],
 	});
 	return Array.isArray(result) ? result : result.ids;
+};
+
+/**
+ * Return counts for only the topics/posts visible to a given user.
+ * This excludes private topics for non-staff.
+ */
+Topics.getVisibleCounts = async function (cid, uid) {
+	// Get all topic ids for this category
+	const tids = await db.getSortedSetRange(`cid:${cid}:tids`, 0, -1);
+	if (!tids.length) {
+		return { topicCount: 0, postCount: 0 };
+	}
+
+	const allTopics = await Topics.getTopicsByTids(tids, uid);
+
+	// Filter out private topics for non-staff
+	const isAdmin = await privileges.users.isAdministrator(uid);
+	const isMod = await privileges.users.isModerator(uid);
+	const visibleTopics = (isAdmin || isMod) ?
+		allTopics :
+		allTopics.filter(t => t.private !== '1');
+
+	// Count visible topics and their posts
+	const topicCount = visibleTopics.length;
+	const postCount = visibleTopics.reduce((sum, t) => sum + (t.postcount || 0), 0);
+
+	return { topicCount, postCount };
 };
 
 require('../promisify')(Topics);

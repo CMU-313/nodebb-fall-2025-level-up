@@ -204,6 +204,7 @@
 	"composer.thumb-remove": "Clear fields",
 	"composer.drag-and-drop-images": "Drag and Drop Images Here",
 	"composer.anonymous-post": "Post Anonymously",
+	"composer.private-to-staff": "Private to Staff",
 
 	"more-users-and-guests": "%1 more user(s) and %2 guest(s)",
 	"more-users": "%1 more user(s)",

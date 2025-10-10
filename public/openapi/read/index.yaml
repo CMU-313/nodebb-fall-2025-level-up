@@ -97,22 +97,13 @@ get:
                                                   description: This is either username or fullname depending on forum and user settings
                                                 userslug:
                                                   type: string
-                                                  description: An URL-safe variant of the username (i.e. lower-cased, spaces
-                                                    removed, etc.)
                                                 picture:
                                                   nullable: true
                                                   type: string
                                                 icon:text:
                                                   type: string
-                                                  description: A single-letter representation of a username. This is used in the
-                                                    auto-generated icon given to
-                                                    users without an avatar
                                                 icon:bgColor:
                                                   type: string
-                                                  description: A six-character hexadecimal colour code assigned to the user. This
-                                                    value is used in conjunction
-                                                    with `icon:text` for the user's
-                                                    auto-generated icon
                                                   example: "#f44336"
                                                 isLocal:
                                                   type: boolean
@@ -144,6 +135,10 @@ get:
                                                   type: string
                                                 title:
                                                   type: string
+                                                private:
+                                                  type: integer
+                                                  enum: [0, 1]
+                                                  description: Whether the topic is private (1 = private, 0 = public)
                                       imageClass:
                                         type: string
                                       timesClicked:
@@ -175,31 +170,19 @@ get:
                                     properties:
                                       uid:
                                         type: number
-                                        description: A user identifier
                                       username:
                                         type: string
-                                        description: A friendly name for a given user account
                                       displayname:
                                         type: string
-                                        description: This is either username or fullname depending on forum and user settings
                                       userslug:
                                         type: string
-                                        description: An URL-safe variant of the username (i.e. lower-cased, spaces
-                                          removed, etc.)
                                       picture:
                                         nullable: true
                                         type: string
                                       icon:text:
                                         type: string
-                                        description: A single-letter representation of a username. This is used in the
-                                          auto-generated icon given to users
-                                          without an avatar
                                       icon:bgColor:
                                         type: string
-                                        description: A six-character hexadecimal colour code assigned to the user. This
-                                          value is used in conjunction with
-                                          `icon:text` for the user's
-                                          auto-generated icon
                                         example: "#f44336"
                                       isLocal:
                                         type: boolean
@@ -230,6 +213,10 @@ get:
                                         type: string
                                       title:
                                         type: string
+                                      private:
+                                        type: integer
+                                        enum: [0, 1]
+                                        description: Whether the topic is private (1 = private, 0 = public)
                             teaser:
                               type: object
                               properties:
@@ -254,6 +241,10 @@ get:
                                       type: string
                                     title:
                                       type: string
+                                    private:
+                                      type: integer
+                                      enum: [0, 1]
+                                      description: Whether the topic is private (1 = private, 0 = public)
                                 user:
                                   type: object
                                   properties:
@@ -268,11 +259,10 @@ get:
                                         example: dragon-fruit
                                       picture:
                                         type: string
-                                        example: 'https://images.unsplash.com/photo-1560070094-e1f2ddec4337?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=256&h=256&q=80'
                                         nullable: true
+                                        example: 'https://images.unsplash.com/photo-1560070094-e1f2ddec4337?...'
                                       displayname:
                                         type: string
-                                        description: This is either username or fullname depending on forum and user settings
                                         example: Dragon Fruit
                                       'icon:text':
                                         type: string
