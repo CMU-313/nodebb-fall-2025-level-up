@@ -29,6 +29,10 @@ export default defineConfig([
 			'test/files/',
 			'*.min.js',
 			'install/docker/',
+
+			'debug/**',
+			'vendor/**',
+			'**/assets/scripts/bundles/**',
 		],
 	},
 	// tests
