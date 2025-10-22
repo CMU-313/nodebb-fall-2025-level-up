@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Plato - activitypub/notes.js</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="">
+  <meta name="author" content="">
+
+  <!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+
+  <link href="../../assets/css/vendor/morris.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/bootstrap.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/font-awesome.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/codemirror.css" rel="stylesheet">
+  <link href="../../assets/css/plato.css" rel="stylesheet">
+  <link href="../../assets/css/plato-file.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="navbar navbar-fixed-top">
+  <div class="container">
+    <a class="navbar-brand" href="http://github.com/es-analysis/plato">Plato on Github</a>
+    <ul class="nav navbar-nav">
+      <li>
+        <a href="../../index.html">Report Home</a>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<div class="jumbotron">
+  <div class="container">
+    <h1>activitypub/notes.js</h1>
+  </div>
+</div>
+
+<div class="container aggregate-stats">
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Maintainability <a href="http://blogs.msdn.com/b/codeanalysis/archive/2007/11/20/maintainability-index-range-and-meaning.aspx"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="A value between 0 and 100 that represents the relative ease of maintaining the code. A high value means better maintainability." data-original-title="Maintainability Index"  data-container="body"></i></a></h2>
+      <p class="stat">66.61</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Lines of code <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h2>
+      <p class="stat">636</p>
+    </div>
+  </div>
+  <div class="row historical">
+    <div class="col-md-6">
+      <p id="chart_historical_maint" class="chart"></p>
+    </div>
+    <div class="col-md-6">
+      <p id="chart_historical_sloc" class="chart"></p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Difficulty  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="The difficulty measure is related to the difficulty of the program to write or understand." data-original-title="Difficulty" data-container="body"></i></a></h2>
+      <p class="stat">66.64</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Estimated Errors  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Halstead's delivered bugs is an estimate for the number of errors in the implementation." data-original-title="Delivered Bugs" data-container="body"></i></a></h2>
+      <p class="stat">8.80</p>
+    </div>
+  </div>
+</div>
+
+<div class="container charts">
+  <div class="row">
+    <h2 class="header">Function weight</h2>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h3 class="chart-header">By Complexity <a href="http://en.wikipedia.org/wiki/Cyclomatic_complexity"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="This metric counts the number of distinct paths through a block of code. Lower values are better." data-original-title="Cyclomatic Complexity" data-container="body"></i></a></h3>
+      <div id="fn-by-complexity" class="stat"></div>
+    </div>
+    <div class="col-md-6">
+      <h3 class="chart-header">By SLOC  <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h3>
+      <div id="fn-by-sloc" class="stat"></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="row">
+    <textarea id="file-source" class="col-md-12">&#039;use strict&#039;;
+
+const winston = require(&#039;winston&#039;);
+const nconf = require(&#039;nconf&#039;);
+
+const db = require(&#039;../database&#039;);
+const batch = require(&#039;../batch&#039;);
+const meta = require(&#039;../meta&#039;);
+const privileges = require(&#039;../privileges&#039;);
+const categories = require(&#039;../categories&#039;);
+const messaging = require(&#039;../messaging&#039;);
+const notifications = require(&#039;../notifications&#039;);
+const user = require(&#039;../user&#039;);
+const topics = require(&#039;../topics&#039;);
+const posts = require(&#039;../posts&#039;);
+const utils = require(&#039;../utils&#039;);
+
+const activitypub = module.parent.exports;
+const Notes = module.exports;
+
+async function lock(value) {
+	const count = await db.incrObjectField(&#039;locks&#039;, value);
+	return count &lt;= 1;
+}
+
+async function unlock(value) {
+	await db.deleteObjectField(&#039;locks&#039;, value);
+}
+
+Notes._normalizeTags = async (tag, cid) =&gt; {
+	const systemTags = (meta.config.systemTags || &#039;&#039;).split(&#039;,&#039;);
+	const maxTags = await categories.getCategoryField(cid, &#039;maxTags&#039;);
+	const tags = (tag || [])
+		.map((tag) =&gt; {
+			tag.name = tag.name.startsWith(&#039;#&#039;) ? tag.name.slice(1) : tag.name;
+			return tag;
+		})
+		.filter(o =&gt; o.type === &#039;Hashtag&#039; &amp;&amp; !systemTags.includes(o.name))
+		.map(t =&gt; t.name);
+
+	if (tags.length &gt; maxTags) {
+		tags.length = maxTags;
+	}
+
+	return tags;
+};
+
+Notes.assert = async (uid, input, options = { skipChecks: false }) =&gt; {
+	/**
+	 * Given the id or object of any as:Note, either retrieves the full context (if resolvable),
+	 * or traverses up the reply chain to build a context.
+	 */
+
+	if (!input) {
+		return null;
+	}
+
+	const id = !activitypub.helpers.isUri(input) ? input.id : input;
+	const lockStatus = await lock(id, &#039;[[error:activitypub.already-asserting]]&#039;);
+	if (!lockStatus) { // unable to achieve lock, stop processing.
+		return null;
+	}
+
+	let chain;
+	let context = await activitypub.contexts.get(uid, id);
+	if (context.tid) {
+		unlock(id);
+		const { tid } = context;
+		return { tid, count: 0 };
+	} else if (context.context) {
+		chain = Array.from(await activitypub.contexts.getItems(uid, context.context, { input }));
+		if (chain &amp;&amp; chain.length) {
+			// Context resolves, use in later topic creation
+			context = context.context;
+		}
+	} else {
+		context = undefined;
+	}
+
+	if (!chain || !chain.length) {
+		// Fall back to inReplyTo traversal on context retrieval failure
+		chain = Array.from(await Notes.getParentChain(uid, input));
+		chain.reverse();
+	}
+
+	// Can&#039;t resolve — give up.
+	if (!chain.length) {
+		unlock(id);
+		return null;
+	}
+
+	// Reorder chain items by timestamp
+	chain = chain.sort((a, b) =&gt; a.timestamp - b.timestamp);
+
+	const mainPost = chain[0];
+	let { pid: mainPid, tid, uid: authorId, timestamp, title, content, sourceContent, _activitypub } = mainPost;
+	const hasTid = !!tid;
+
+	const cid = hasTid ? await topics.getTopicField(tid, &#039;cid&#039;) : options.cid || -1;
+
+	if (options.cid &amp;&amp; cid === -1) {
+		// Move topic if currently uncategorized
+		await topics.tools.move(tid, { cid: options.cid, uid: &#039;system&#039; });
+	}
+
+	const members = await db.isSortedSetMembers(`tid:${tid}:posts`, chain.slice(1).map(p =&gt; p.pid));
+	members.unshift(await posts.exists(mainPid));
+	if (tid &amp;&amp; members.every(Boolean)) {
+		// All cached, return early.
+		activitypub.helpers.log(&#039;[notes/assert] No new notes to process.&#039;);
+		unlock(id);
+		return { tid, count: 0 };
+	}
+
+	if (hasTid) {
+		mainPid = await topics.getTopicField(tid, &#039;mainPid&#039;);
+	} else {
+		// Check recipients/audience for category (local or remote)
+		const set = activitypub.helpers.makeSet(_activitypub, [&#039;to&#039;, &#039;cc&#039;, &#039;audience&#039;]);
+		await activitypub.actors.assert(Array.from(set));
+
+		// Local
+		const resolved = await Promise.all(Array.from(set).map(async id =&gt; await activitypub.helpers.resolveLocalId(id)));
+		const recipientCids = resolved
+			.filter(Boolean)
+			.filter(({ type }) =&gt; type === &#039;category&#039;)
+			.map(obj =&gt; obj.id);
+
+		// Remote
+		let remoteCid;
+		const assertedGroups = await categories.exists(Array.from(set));
+		try {
+			const { hostname } = new URL(mainPid);
+			remoteCid = Array.from(set).filter((id, idx) =&gt; {
+				const { hostname: cidHostname } = new URL(id);
+				return assertedGroups[idx] &amp;&amp; cidHostname === hostname;
+			}).shift();
+		} catch (e) {
+			// noop
+		}
+
+		if (remoteCid || recipientCids.length) {
+			// Overrides passed-in value, respect addressing from main post over booster
+			options.cid = remoteCid || recipientCids.shift();
+		}
+
+		// mainPid ok to leave as-is
+		title = title || activitypub.helpers.generateTitle(utils.decodeHTMLEntities(content || sourceContent));
+
+		// Remove any custom emoji from title
+		if (_activitypub &amp;&amp; _activitypub.tag &amp;&amp; Array.isArray(_activitypub.tag)) {
+			_activitypub.tag
+				.filter(tag =&gt; tag.type === &#039;Emoji&#039;)
+				.forEach((tag) =&gt; {
+					title = title.replace(new RegExp(tag.name, &#039;g&#039;), &#039;&#039;);
+				});
+		}
+	}
+	mainPid = utils.isNumber(mainPid) ? parseInt(mainPid, 10) : mainPid;
+
+	// Relation &amp; privilege check for local categories
+	const inputIndex = chain.map(n =&gt; n.pid).indexOf(id);
+	const hasRelation =
+		uid || hasTid ||
+		options.skipChecks || options.cid ||
+		await assertRelation(chain[inputIndex !== -1 ? inputIndex : 0]);
+	const privilege = `topics:${tid ? &#039;reply&#039; : &#039;create&#039;}`;
+	const allowed = await privileges.categories.can(privilege, options.cid || cid, activitypub._constants.uid);
+	if (!hasRelation || !allowed) {
+		if (!hasRelation) {
+			activitypub.helpers.log(`[activitypub/notes.assert] Not asserting ${id} as it has no relation to existing tracked content.`);
+		}
+
+		unlock(id);
+		return null;
+	}
+
+	tid = tid || utils.generateUUID();
+	mainPost.tid = tid;
+
+	const urlMap = chain.reduce((map, post) =&gt; (post.url ? map.set(post.url, post.id) : map), new Map());
+	const unprocessed = chain.map((post) =&gt; {
+		post.tid = tid; // add tid to post hash
+
+		// Ensure toPids in replies are ids
+		if (urlMap.has(post.toPid)) {
+			post.toPid = urlMap.get(post.toPid);
+		}
+
+		return post;
+	}).filter((p, idx) =&gt; !members[idx]);
+	const count = unprocessed.length;
+	activitypub.helpers.log(`[notes/assert] ${count} new note(s) found.`);
+
+	if (!hasTid) {
+		const { to, cc, attachment } = mainPost._activitypub;
+		const tags = await Notes._normalizeTags(mainPost._activitypub.tag || []);
+
+		try {
+			await topics.post({
+				tid,
+				uid: authorId,
+				cid: options.cid || cid,
+				pid: mainPid,
+				title,
+				timestamp,
+				tags,
+				content: mainPost.content,
+				sourceContent: mainPost.sourceContent,
+				_activitypub: mainPost._activitypub,
+			});
+			unprocessed.shift();
+		} catch (e) {
+			activitypub.helpers.log(`[activitypub/notes.assert] Could not post topic (${mainPost.pid}): ${e.message}`);
+			return null;
+		}
+
+		// These must come after topic is posted
+		await Promise.all([
+			Notes.updateLocalRecipients(mainPid, { to, cc }),
+			mainPost._activitypub.image ? topics.thumbs.associate({
+				id: tid,
+				path: mainPost._activitypub.image,
+			}) : null,
+			posts.attachments.update(mainPid, attachment),
+		]);
+
+		if (context) {
+			activitypub.helpers.log(`[activitypub/notes.assert] Associating tid ${tid} with context ${context}`);
+			await topics.setTopicField(tid, &#039;context&#039;, context);
+		}
+	}
+
+	for (const post of unprocessed) {
+		const { to, cc, attachment } = post._activitypub;
+
+		try {
+			// eslint-disable-next-line no-await-in-loop
+			await topics.reply(post);
+			// eslint-disable-next-line no-await-in-loop
+			await Promise.all([
+				Notes.updateLocalRecipients(post.pid, { to, cc }),
+				posts.attachments.update(post.pid, attachment),
+			]);
+		} catch (e) {
+			activitypub.helpers.log(`[activitypub/notes.assert] Could not add reply (${post.pid}): ${e.message}`);
+		}
+	}
+
+	await Promise.all([
+		Notes.syncUserInboxes(tid, uid),
+		unlock(id),
+	]);
+
+	return { tid, count };
+};
+
+Notes.assertPrivate = async (object) =&gt; {
+	// Given an object, adds it to an existing chat or creates a new chat otherwise
+	// todo: context stuff
+
+	if (!object || !object.id || !activitypub.helpers.isUri(object.id)) {
+		return null;
+	}
+
+	const localUids = [];
+	const recipients = new Set([...(object.to || []), ...(object.cc || [])]);
+	await Promise.all(Array.from(recipients).map(async (value) =&gt; {
+		const { type, id } = await activitypub.helpers.resolveLocalId(value);
+		if (type === &#039;user&#039;) {
+			localUids.push(id);
+			recipients.delete(value);
+			recipients.add(parseInt(id, 10));
+		}
+	}));
+
+	// Trim recipient list down to asserted actors (and local users) only
+	await activitypub.actors.assert([...recipients]);
+	const exists = await user.exists([...recipients]);
+	Array.from(recipients).forEach((uid, idx) =&gt; {
+		if (!exists[idx]) {
+			recipients.delete(uid);
+		}
+	});
+
+	// Locate the roomId based on `inReplyTo`
+	let roomId;
+	const resolved = await activitypub.helpers.resolveLocalId(object.inReplyTo);
+	let toMid = resolved.type === &#039;message&#039; &amp;&amp; resolved.id;
+	if (object.inReplyTo &amp;&amp; await messaging.messageExists(toMid || object.inReplyTo)) {
+		roomId = await messaging.getMessageField(toMid || object.inReplyTo, &#039;roomId&#039;);
+	}
+
+	// Compare room members with object recipients; if someone in-room is omitted, start new chat
+	const participants = await messaging.getUsersInRoom(roomId, 0, -1);
+	const participantUids = participants.map(user =&gt; user.uid);
+	if (roomId) {
+		const omitted = participants.filter((user) =&gt; {
+			const { uid } = user;
+			return !recipients.has(uid) &amp;&amp; uid !== object.attributedTo;
+		});
+		if (omitted.length) {
+			toMid = undefined; // message creation logic fails if toMid is not in room
+			roomId = null;
+		}
+	}
+
+	let timestamp;
+	try {
+		timestamp = new Date(object.published).getTime() || Date.now();
+	} catch (e) {
+		timestamp = Date.now();
+	}
+
+	const payload = await activitypub.mocks.message(object);
+
+	try {
+		await messaging.checkContent(payload.content, false);
+	} catch (e) {
+		const { displayname, userslug } = await user.getUserFields(payload.uid, [&#039;displayname&#039;, &#039;userslug&#039;]);
+		const notification = await notifications.create({
+			bodyShort: `[[error:remote-chat-received-too-long, ${displayname}]]`,
+			path: `/user/${userslug}`,
+			nid: `error:chat:uid:${payload.uid}`,
+			from: payload.uid,
+		});
+		notifications.push(notification, Array.from(recipients).filter(uid =&gt; utils.isNumber(uid)));
+		return null;
+	}
+
+	if (!roomId) {
+		roomId = await messaging.newRoom(payload.uid, { uids: [...recipients] });
+	}
+
+	// Add any new members to the chat
+	const added = Array.from(recipients).filter(uid =&gt; !participantUids.includes(uid));
+	const assertion = await activitypub.actors.assert(added);
+	if (assertion) {
+		await messaging.addUsersToRoom(payload.uid, added, roomId);
+	}
+
+	// Add message to room
+	const message = await messaging.sendMessage({
+		...payload,
+		timestamp: Date.now(),
+		roomId: roomId,
+		toMid: toMid,
+	});
+	messaging.notifyUsersInRoom(payload.uid, roomId, message);
+
+	// Set real timestamp back so that the message shows even though it predates room joining
+	await messaging.setMessageField(payload.mid, &#039;timestamp&#039;, timestamp);
+
+	return { roomId };
+};
+
+async function assertRelation(post) {
+	/**
+	 * Given a mocked post object, ensures that it is related to some other object in database
+	 * This check ensures that random content isn&#039;t added to the database just because it is received.
+	 */
+
+	// Is followed by at least one local user
+	const { followers } = await activitypub.actors.getLocalFollowCounts(post.uid);
+
+	// Local user is mentioned
+	const { tag } = post._activitypub;
+	let uids = [];
+	if (tag &amp;&amp; tag.length) {
+		const slugs = tag.reduce((slugs, tag) =&gt; {
+			if (tag.type === &#039;Mention&#039;) {
+				const [slug, hostname] = tag.name.slice(1).split(&#039;@&#039;);
+				if (hostname === nconf.get(&#039;url_parsed&#039;).hostname) {
+					slugs.push(slug);
+				}
+			}
+			return slugs;
+		}, []);
+
+		uids = slugs.length ? await db.sortedSetScores(&#039;userslug:uid&#039;, slugs) : [];
+		uids = uids.filter(Boolean);
+	}
+
+	return followers &gt; 0 || uids.length;
+}
+
+Notes.updateLocalRecipients = async (id, { to, cc }) =&gt; {
+	const recipients = new Set([...(to || []), ...(cc || [])]);
+	const uids = new Set();
+	await Promise.all(Array.from(recipients).map(async (recipient) =&gt; {
+		const { type, id } = await activitypub.helpers.resolveLocalId(recipient);
+		if (type === &#039;user&#039; &amp;&amp; await user.exists(id)) {
+			uids.add(parseInt(id, 10));
+			return;
+		}
+
+		const followedUid = await db.getObjectField(&#039;followersUrl:uid&#039;, recipient);
+		if (followedUid) {
+			const { uids: followers } = await activitypub.actors.getLocalFollowers(followedUid);
+			if (followers.size &gt; 0) {
+				followers.forEach((uid) =&gt; {
+					uids.add(uid);
+				});
+			}
+		}
+	}));
+
+	if (uids.size &gt; 0) {
+		await db.setAdd(`post:${id}:recipients`, Array.from(uids));
+	}
+};
+
+Notes.getParentChain = async (uid, input) =&gt; {
+	// Traverse upwards via `inReplyTo` until you find the root-level Note
+	const id = activitypub.helpers.isUri(input) ? input : input.id;
+
+	const chain = new Set();
+	const traverse = async (uid, id) =&gt; {
+		// Handle remote reference to local post
+		const { type, id: localId } = await activitypub.helpers.resolveLocalId(id);
+		if (type === &#039;post&#039; &amp;&amp; localId) {
+			return await traverse(uid, localId);
+		}
+
+		const postData = await posts.getPostData(id);
+		if (postData) {
+			chain.add(postData);
+			if (postData.toPid) {
+				await traverse(uid, postData.toPid);
+			} else if (utils.isNumber(id)) { // local pid without toPid, could be OP or reply to OP
+				const mainPid = await topics.getTopicField(postData.tid, &#039;mainPid&#039;);
+				if (mainPid !== parseInt(id, 10)) {
+					await traverse(uid, mainPid);
+				}
+			}
+		} else {
+			let object = !activitypub.helpers.isUri(input) &amp;&amp; input.id === id ? input : undefined;
+			try {
+				object = object || await activitypub.get(&#039;uid&#039;, uid, id);
+
+				// Handle incorrect id passed in
+				if (id !== object.id) {
+					return await traverse(uid, object.id);
+				}
+
+				object = await activitypub.mocks.post(object);
+				if (object) {
+					chain.add(object);
+					if (object.toPid) {
+						await traverse(uid, object.toPid);
+					}
+				}
+			} catch (e) {
+				winston.verbose(`[activitypub/notes/getParentChain] Cannot retrieve ${id}, terminating here.`);
+			}
+		}
+	};
+
+	await traverse(uid, id);
+	return chain;
+};
+
+Notes.syncUserInboxes = async function (tid, uid) {
+	const [pids, { cid, mainPid, tags }] = await Promise.all([
+		db.getSortedSetMembers(`tid:${tid}:posts`),
+		topics.getTopicFields(tid, [&#039;tid&#039;, &#039;cid&#039;, &#039;mainPid&#039;, &#039;tags&#039;]),
+	]);
+	pids.unshift(mainPid);
+
+	const recipients = await db.getSetsMembers(pids.map(id =&gt; `post:${id}:recipients`));
+	const uids = recipients.reduce((set, uids) =&gt; new Set([...set, ...uids.map(u =&gt; parseInt(u, 10))]), new Set());
+	if (uid) {
+		uids.add(parseInt(uid, 10));
+	}
+
+	// Tag followers
+	const tagsFollowers = await topics.getTagsFollowers(tags.map(tag =&gt; tag.value));
+	new Set(tagsFollowers.flat()).forEach((uid) =&gt; {
+		uids.add(uid);
+	});
+
+	// Category followers
+	const categoryFollowers = await activitypub.actors.getLocalFollowers(cid);
+	categoryFollowers.uids.forEach((uid) =&gt; {
+		uids.add(uid);
+	});
+
+	const keys = Array.from(uids).map(uid =&gt; `uid:${uid}:inbox`);
+	const score = await db.sortedSetScore(`cid:${cid}:tids`, tid);
+
+	const removeKeys = (await db.getSetMembers(`tid:${tid}:recipients`))
+		.filter(uid =&gt; !uids.has(parseInt(uid, 10)))
+		.map((uid =&gt; `uid:${uid}:inbox`));
+
+	activitypub.helpers.log(`[activitypub/syncUserInboxes] Syncing tid ${tid} with ${uids.size} inboxes`);
+	await Promise.all([
+		db.sortedSetsRemove(removeKeys, tid),
+		db.sortedSetsAdd(keys, keys.map(() =&gt; score || Date.now()), tid),
+		db.setAdd(`tid:${tid}:recipients`, Array.from(uids)),
+	]);
+};
+
+Notes.getCategoryFollowers = async (cid) =&gt; {
+	// Retrieves remote users who have followed a category; used to build recipient list
+	let uids = await db.getSortedSetRangeByScore(`cid:${cid}:uid:watch:state`, 0, -1, categories.watchStates.tracking, categories.watchStates.tracking);
+	uids = uids.filter(uid =&gt; !utils.isNumber(uid));
+
+	return uids;
+};
+
+Notes.announce = {};
+
+Notes.announce.list = async ({ pid, tid }) =&gt; {
+	let pids = [];
+	if (pid) {
+		pids = [pid];
+	} else if (tid) {
+		let mainPid;
+		([pids, mainPid] = await Promise.all([
+			db.getSortedSetMembers(`tid:${tid}:posts`),
+			topics.getTopicField(tid, &#039;mainPid&#039;),
+		]));
+		pids.unshift(mainPid);
+	}
+
+	if (!pids.length) {
+		return [];
+	}
+
+	const keys = pids.map(pid =&gt; `pid:${pid}:announces`);
+	let announces = await db.getSortedSetsMembersWithScores(keys);
+	announces = announces.reduce((memo, cur, idx) =&gt; {
+		if (cur.length) {
+			const pid = pids[idx];
+			cur.forEach(({ value: actor, score: timestamp }) =&gt; {
+				memo.push({ pid, actor, timestamp });
+			});
+		}
+		return memo;
+	}, []);
+
+	return announces;
+};
+
+Notes.announce.add = async (pid, actor, timestamp = Date.now()) =&gt; {
+	const [tid] = await Promise.all([
+		posts.getPostField(pid, &#039;tid&#039;),
+		db.sortedSetAdd(`pid:${pid}:announces`, timestamp, actor),
+	]);
+	await Promise.all([
+		posts.setPostField(pid, &#039;announces&#039;, await db.sortedSetCard(`pid:${pid}:announces`)),
+		topics.tools.share(tid, actor, timestamp),
+	]);
+};
+
+Notes.announce.remove = async (pid, actor) =&gt; {
+	await db.sortedSetRemove(`pid:${pid}:announces`, actor);
+	const count = await db.sortedSetCard(`pid:${pid}:announces`);
+	if (count &gt; 0) {
+		await posts.setPostField(pid, &#039;announces&#039;, count);
+	} else {
+		await db.deleteObjectField(`post:${pid}`, &#039;announces&#039;);
+	}
+};
+
+Notes.announce.removeAll = async (pid) =&gt; {
+	await Promise.all([
+		db.delete(`pid:${pid}:announces`),
+		db.deleteObjectField(`post:${pid}`, &#039;announces&#039;),
+	]);
+};
+
+Notes.delete = async (pids) =&gt; {
+	if (!Array.isArray(pids)) {
+		pids = [pids];
+	}
+
+	const exists = await posts.exists(pids);
+	pids = pids.filter((_, idx) =&gt; exists[idx]);
+
+	let tids = await posts.getPostsFields(pids, [&#039;tid&#039;]);
+	tids = new Set(tids.map(obj =&gt; obj.tid));
+
+	const recipientSets = pids.map(id =&gt; `post:${id}:recipients`);
+	const announcerSets = pids.map(id =&gt; `pid:${id}:announces`);
+
+	await db.deleteAll([...recipientSets, ...announcerSets]);
+	await Promise.all(Array.from(tids).map(async tid =&gt; Notes.syncUserInboxes(tid)));
+};
+
+Notes.prune = async () =&gt; {
+	/**
+	 * Prune topics in cid -1 that have received no engagement.
+	 * Engagement is defined as:
+	 *   - Replied to (contains a local reply)
+	 *   - Post within is liked
+	 */
+	winston.info(&#039;[notes/prune] Starting scheduled pruning of topics&#039;);
+	const start = &#039;-inf&#039;;
+	const stop = Date.now() - (1000 * 60 * 60 * 24 * meta.config.activitypubContentPruneDays);
+	let tids = await db.getSortedSetRangeByScore(&#039;cid:-1:tids&#039;, 0, -1, start, stop);
+
+	winston.info(`[notes/prune] Found ${tids.length} topics older than 30 days (since last activity).`);
+
+	const posters = await db.getSortedSetsMembers(tids.map(tid =&gt; `tid:${tid}:posters`));
+	const hasLocalVoter = await Promise.all(tids.map(async (tid) =&gt; {
+		const mainPid = await db.getObjectField(`topic:${tid}`, &#039;mainPid&#039;);
+		const pids = await db.getSortedSetMembers(`tid:${tid}:posts`);
+		pids.unshift(mainPid);
+
+		// Check voters of each pid for a local uid
+		const voters = new Set();
+		await Promise.all(pids.map(async (pid) =&gt; {
+			const [upvoters, downvoters] = await db.getSetsMembers([`pid:${pid}:upvote`, `pid:${pid}:downvote`]);
+			upvoters.forEach(uid =&gt; voters.add(uid));
+			downvoters.forEach(uid =&gt; voters.add(uid));
+		}));
+
+		return Array.from(voters).some(uid =&gt; utils.isNumber(uid));
+	}));
+
+	tids = tids.filter((_, idx) =&gt; {
+		const localPoster = posters[idx].some(uid =&gt; utils.isNumber(uid));
+		const localVoter = hasLocalVoter[idx];
+
+		return !localPoster &amp;&amp; !localVoter;
+	});
+
+	winston.info(`[notes/prune] ${tids.length} topics eligible for pruning`);
+
+	await batch.processArray(tids, async (tids) =&gt; {
+		await Promise.all(tids.map(async tid =&gt; await topics.purgePostsAndTopic(tid, 0)));
+	}, { batch: 100 });
+
+	winston.info(&#039;[notes/prune] Scheduled pruning of topics complete.&#039;);
+};</textarea>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="container">
+    <p>.</p>
+  </div>
+</footer>
+
+<script type="text/html" id="complexity-popover-template">
+  <div class="complexity-notice">
+    Complexity : {{ cyclomatic }} <br>
+    Length : {{ halstead.length }} <br>
+    Difficulty : {{ halstead.difficulty.toFixed(2) }} <br>
+    Est # bugs : {{ halstead.bugs.toFixed(2) }}<br>
+  </div>
+</script>
+
+<script type="text/javascript" src="../../assets/scripts/bundles/core-bundle.js"></script>
+<script type="text/javascript" src="../../assets/scripts/bundles/codemirror.js"></script>
+<script type="text/javascript" src="../../assets/scripts/codemirror.markpopovertext.js"></script>
+<script type="text/javascript" src="report.js"></script>
+<script type="text/javascript" src="report.history.js"></script>
+<script type="text/javascript" src="../../assets/scripts/plato-file.js"></script>
+</body>
+</html>

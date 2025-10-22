@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Plato - debug/report.js</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="">
+  <meta name="author" content="">
+
+  <!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+
+  <link href="../../assets/css/vendor/morris.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/bootstrap.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/font-awesome.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/codemirror.css" rel="stylesheet">
+  <link href="../../assets/css/plato.css" rel="stylesheet">
+  <link href="../../assets/css/plato-file.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="navbar navbar-fixed-top">
+  <div class="container">
+    <a class="navbar-brand" href="http://github.com/es-analysis/plato">Plato on Github</a>
+    <ul class="nav navbar-nav">
+      <li>
+        <a href="../../index.html">Report Home</a>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<div class="jumbotron">
+  <div class="container">
+    <h1>debug/report.js</h1>
+  </div>
+</div>
+
+<div class="container aggregate-stats">
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Maintainability <a href="http://blogs.msdn.com/b/codeanalysis/archive/2007/11/20/maintainability-index-range-and-meaning.aspx"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="A value between 0 and 100 that represents the relative ease of maintaining the code. A high value means better maintainability." data-original-title="Maintainability Index"  data-container="body"></i></a></h2>
+      <p class="stat">24.47</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Lines of code <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h2>
+      <p class="stat">1</p>
+    </div>
+  </div>
+  <div class="row historical">
+    <div class="col-md-6">
+      <p id="chart_historical_maint" class="chart"></p>
+    </div>
+    <div class="col-md-6">
+      <p id="chart_historical_sloc" class="chart"></p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Difficulty  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="The difficulty measure is related to the difficulty of the program to write or understand." data-original-title="Difficulty" data-container="body"></i></a></h2>
+      <p class="stat">5.67</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Estimated Errors  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Halstead's delivered bugs is an estimate for the number of errors in the implementation." data-original-title="Delivered Bugs" data-container="body"></i></a></h2>
+      <p class="stat">2.41</p>
+    </div>
+  </div>
+</div>
+
+<div class="container charts">
+  <div class="row">
+    <h2 class="header">Function weight</h2>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h3 class="chart-header">By Complexity <a href="http://en.wikipedia.org/wiki/Cyclomatic_complexity"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="This metric counts the number of distinct paths through a block of code. Lower values are better." data-original-title="Cyclomatic Complexity" data-container="body"></i></a></h3>
+      <div id="fn-by-complexity" class="stat"></div>
+    </div>
+    <div class="col-md-6">
+      <h3 class="chart-header">By SLOC  <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h3>
+      <div id="fn-by-sloc" class="stat"></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="row">
+    <textarea id="file-source" class="col-md-12">__report = {&quot;summary&quot;:{&quot;total&quot;:{&quot;jshint&quot;:192,&quot;sloc&quot;:686,&quot;maintainability&quot;:632.9159999999999},&quot;average&quot;:{&quot;sloc&quot;:76,&quot;maintainability&quot;:&quot;70.32&quot;,&quot;jshint&quot;:&quot;21.33&quot;}},&quot;reports&quot;:[{&quot;info&quot;:{&quot;file&quot;:&quot;Gruntfile.js&quot;,&quot;fileShort&quot;:&quot;Gruntfile.js&quot;,&quot;fileSafe&quot;:&quot;Gruntfile_js&quot;,&quot;link&quot;:&quot;files/Gruntfile_js/index.html&quot;},&quot;jshint&quot;:{&quot;messages&quot;:51},&quot;complexity&quot;:{&quot;methodAggregate&quot;:{&quot;cyclomatic&quot;:20,&quot;cyclomaticDensity&quot;:16.129,&quot;halstead&quot;:{&quot;bugs&quot;:1.652,&quot;difficulty&quot;:24.64,&quot;effort&quot;:122094.292,&quot;length&quot;:668,&quot;time&quot;:6783.016,&quot;vocabulary&quot;:171,&quot;volume&quot;:4955.125,&quot;operands&quot;:{&quot;distinct&quot;:150,&quot;total&quot;:352,&quot;identifiers&quot;:[&quot;__stripped__&quot;]},&quot;operators&quot;:{&quot;distinct&quot;:21,&quot;total&quot;:316,&quot;identifiers&quot;:[&quot;__stripped__&quot;]}},&quot;params&quot;:18,&quot;sloc&quot;:{&quot;logical&quot;:124,&quot;physical&quot;:204}},&quot;module&quot;:&quot;Gruntfile.js&quot;,&quot;maintainability&quot;:68.303}},{&quot;info&quot;:{&quot;file&quot;:&quot;app.js&quot;,&quot;fileShort&quot;:&quot;app.js&quot;,&quot;fileSafe&quot;:&quot;app_js&quot;,&quot;link&quot;:&quot;files/app_js/index.html&quot;},&quot;jshint&quot;:{&quot;messages&quot;:30},&quot;complexity&quot;:{&quot;methodAggregate&quot;:{&quot;cyclomatic&quot;:18,&quot;cyclomaticDensity&quot;:34.615,&quot;halstead&quot;:{&quot;bugs&quot;:0.759,&quot;difficulty&quot;:15.349,&quot;effort&quot;:34950.965,&quot;length&quot;:342,&quot;time&quot;:1941.72,&quot;vocabulary&quot;:101,&quot;volume&quot;:2277.108,&quot;operands&quot;:{&quot;distinct&quot;:86,&quot;total&quot;:176,&quot;identifiers&quot;:[&quot;__stripped__&quot;]},&quot;operators&quot;:{&quot;distinct&quot;:15,&quot;total&quot;:166,&quot;identifiers&quot;:[&quot;__stripped__&quot;]}},&quot;params&quot;:0,&quot;sloc&quot;:{&quot;logical&quot;:52,&quot;physical&quot;:82}},&quot;module&quot;:&quot;app.js&quot;,&quot;maintainability&quot;:41.255}},{&quot;info&quot;:{&quot;file&quot;:&quot;commitlint.config.js&quot;,&quot;fileShort&quot;:&quot;commitlint.config.js&quot;,&quot;fileSafe&quot;:&quot;commitlint_config_js&quot;,&quot;link&quot;:&quot;files/commitlint_config_js/index.html&quot;},&quot;jshint&quot;:{&quot;messages&quot;:2},&quot;complexity&quot;:{&quot;methodAggregate&quot;:{&quot;cyclomatic&quot;:1,&quot;cyclomaticDensity&quot;:16.667,&quot;halstead&quot;:{&quot;bugs&quot;:0.06,&quot;difficulty&quot;:2.604,&quot;effort&quot;:468.087,&quot;length&quot;:37,&quot;time&quot;:26.005,&quot;vocabulary&quot;:29,&quot;volume&quot;:179.745,&quot;operands&quot;:{&quot;distinct&quot;:24,&quot;total&quot;:25,&quot;identifiers&quot;:[&quot;__stripped__&quot;]},&quot;operators&quot;:{&quot;distinct&quot;:5,&quot;total&quot;:12,&quot;identifiers&quot;:[&quot;__stripped__&quot;]}},&quot;params&quot;:0,&quot;sloc&quot;:{&quot;logical&quot;:6,&quot;physical&quot;:26}},&quot;module&quot;:&quot;commitlint.config.js&quot;,&quot;maintainability&quot;:70.728}},{&quot;info&quot;:{&quot;file&quot;:&quot;loader.js&quot;,&quot;fileShort&quot;:&quot;loader.js&quot;,&quot;fileSafe&quot;:&quot;loader_js&quot;,&quot;link&quot;:&quot;files/loader_js/index.html&quot;},&quot;jshint&quot;:{&quot;messages&quot;:51},&quot;complexity&quot;:{&quot;methodAggregate&quot;:{&quot;cyclomatic&quot;:36,&quot;cyclomaticDensity&quot;:21.053,&quot;halstead&quot;:{&quot;bugs&quot;:2.493,&quot;difficulty&quot;:48.276,&quot;effort&quot;:361053.483,&quot;length&quot;:973,&quot;time&quot;:20058.527,&quot;vocabulary&quot;:206,&quot;volume&quot;:7478.965,&quot;operands&quot;:{&quot;distinct&quot;:174,&quot;total&quot;:525,&quot;identifiers&quot;:[&quot;__stripped__&quot;]},&quot;operators&quot;:{&quot;distinct&quot;:32,&quot;total&quot;:448,&quot;identifiers&quot;:[&quot;__stripped__&quot;]}},&quot;params&quot;:13,&quot;sloc&quot;:{&quot;logical&quot;:171,&quot;physical&quot;:238}},&quot;module&quot;:&quot;loader.js&quot;,&quot;maintainability&quot;:65.228}},{&quot;info&quot;:{&quot;file&quot;:&quot;require-main.js&quot;,&quot;fileShort&quot;:&quot;require-main.js&quot;,&quot;fileSafe&quot;:&quot;require_main_js&quot;,&quot;link&quot;:&quot;files/require_main_js/index.html&quot;},&quot;jshint&quot;:{&quot;messages&quot;:5},&quot;complexity&quot;:{&quot;methodAggregate&quot;:{&quot;cyclomatic&quot;:2,&quot;cyclomaticDensity&quot;:50,&quot;halstead&quot;:{&quot;bugs&quot;:0.025,&quot;difficulty&quot;:6.417,&quot;effort&quot;:474.89,&quot;length&quot;:20,&quot;time&quot;:26.383,&quot;vocabulary&quot;:13,&quot;volume&quot;:74.009,&quot;operands&quot;:{&quot;distinct&quot;:6,&quot;total&quot;:11,&quot;identifiers&quot;:[&quot;__stripped__&quot;]},&quot;operators&quot;:{&quot;distinct&quot;:7,&quot;total&quot;:9,&quot;identifiers&quot;:[&quot;__stripped__&quot;]}},&quot;params&quot;:1,&quot;sloc&quot;:{&quot;logical&quot;:4,&quot;physical&quot;:10}},&quot;module&quot;:&quot;require-main.js&quot;,&quot;maintainability&quot;:94.584}},{&quot;info&quot;:{&quot;file&quot;:&quot;webpack.common.js&quot;,&quot;fileShort&quot;:&quot;webpack.common.js&quot;,&quot;fileSafe&quot;:&quot;webpack_common_js&quot;,&quot;link&quot;:&quot;files/webpack_common_js/index.html&quot;},&quot;jshint&quot;:{&quot;messages&quot;:29},&quot;complexity&quot;:{&quot;methodAggregate&quot;:{&quot;cyclomatic&quot;:5,&quot;cyclomaticDensity&quot;:11.364,&quot;halstead&quot;:{&quot;bugs&quot;:0.608,&quot;difficulty&quot;:14.674,&quot;effort&quot;:26767.943,&quot;length&quot;:269,&quot;time&quot;:1487.108,&quot;vocabulary&quot;:110,&quot;volume&quot;:1824.186,&quot;operands&quot;:{&quot;distinct&quot;:92,&quot;total&quot;:150,&quot;identifiers&quot;:[&quot;__stripped__&quot;]},&quot;operators&quot;:{&quot;distinct&quot;:18,&quot;total&quot;:119,&quot;identifiers&quot;:[&quot;__stripped__&quot;]}},&quot;params&quot;:1,&quot;sloc&quot;:{&quot;logical&quot;:44,&quot;physical&quot;:69}},&quot;module&quot;:&quot;webpack.common.js&quot;,&quot;maintainability&quot;:100}},{&quot;info&quot;:{&quot;file&quot;:&quot;webpack.dev.js&quot;,&quot;fileShort&quot;:&quot;webpack.dev.js&quot;,&quot;fileSafe&quot;:&quot;webpack_dev_js&quot;,&quot;link&quot;:&quot;files/webpack_dev_js/index.html&quot;},&quot;jshint&quot;:{&quot;messages&quot;:7},&quot;complexity&quot;:{&quot;methodAggregate&quot;:{&quot;cyclomatic&quot;:1,&quot;cyclomaticDensity&quot;:16.667,&quot;halstead&quot;:{&quot;bugs&quot;:0.035,&quot;difficulty&quot;:4.2,&quot;effort&quot;:436.8,&quot;length&quot;:26,&quot;time&quot;:24.267,&quot;vocabulary&quot;:16,&quot;volume&quot;:104,&quot;operands&quot;:{&quot;distinct&quot;:10,&quot;total&quot;:14,&quot;identifiers&quot;:[&quot;__stripped__&quot;]},&quot;operators&quot;:{&quot;distinct&quot;:6,&quot;total&quot;:12,&quot;identifiers&quot;:[&quot;__stripped__&quot;]}},&quot;params&quot;:0,&quot;sloc&quot;:{&quot;logical&quot;:6,&quot;physical&quot;:9}},&quot;module&quot;:&quot;webpack.dev.js&quot;,&quot;maintainability&quot;:70.866}},{&quot;info&quot;:{&quot;file&quot;:&quot;webpack.installer.js&quot;,&quot;fileShort&quot;:&quot;webpack.installer.js&quot;,&quot;fileSafe&quot;:&quot;webpack_installer_js&quot;,&quot;link&quot;:&quot;files/webpack_installer_js/index.html&quot;},&quot;jshint&quot;:{&quot;messages&quot;:6},&quot;complexity&quot;:{&quot;methodAggregate&quot;:{&quot;cyclomatic&quot;:1,&quot;cyclomaticDensity&quot;:7.692,&quot;halstead&quot;:{&quot;bugs&quot;:0.081,&quot;difficulty&quot;:3.938,&quot;effort&quot;:955.85,&quot;length&quot;:49,&quot;time&quot;:53.103,&quot;vocabulary&quot;:31,&quot;volume&quot;:242.756,&quot;operands&quot;:{&quot;distinct&quot;:24,&quot;total&quot;:27,&quot;identifiers&quot;:[&quot;__stripped__&quot;]},&quot;operators&quot;:{&quot;distinct&quot;:7,&quot;total&quot;:22,&quot;identifiers&quot;:[&quot;__stripped__&quot;]}},&quot;params&quot;:0,&quot;sloc&quot;:{&quot;logical&quot;:13,&quot;physical&quot;:25}},&quot;module&quot;:&quot;webpack.installer.js&quot;,&quot;maintainability&quot;:61.975}},{&quot;info&quot;:{&quot;file&quot;:&quot;webpack.prod.js&quot;,&quot;fileShort&quot;:&quot;webpack.prod.js&quot;,&quot;fileSafe&quot;:&quot;webpack_prod_js&quot;,&quot;link&quot;:&quot;files/webpack_prod_js/index.html&quot;},&quot;jshint&quot;:{&quot;messages&quot;:11},&quot;complexity&quot;:{&quot;methodAggregate&quot;:{&quot;cyclomatic&quot;:1,&quot;cyclomaticDensity&quot;:7.143,&quot;halstead&quot;:{&quot;bugs&quot;:0.105,&quot;difficulty&quot;:5.818,&quot;effort&quot;:1827.148,&quot;length&quot;:64,&quot;time&quot;:101.508,&quot;vocabulary&quot;:30,&quot;volume&quot;:314.041,&quot;operands&quot;:{&quot;distinct&quot;:22,&quot;total&quot;:32,&quot;identifiers&quot;:[&quot;__stripped__&quot;]},&quot;operators&quot;:{&quot;distinct&quot;:8,&quot;total&quot;:32,&quot;identifiers&quot;:[&quot;__stripped__&quot;]}},&quot;params&quot;:0,&quot;sloc&quot;:{&quot;logical&quot;:14,&quot;physical&quot;:23}},&quot;module&quot;:&quot;webpack.prod.js&quot;,&quot;maintainability&quot;:59.977}}]}</textarea>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="container">
+    <p>.</p>
+  </div>
+</footer>
+
+<script type="text/html" id="complexity-popover-template">
+  <div class="complexity-notice">
+    Complexity : {{ cyclomatic }} <br>
+    Length : {{ halstead.length }} <br>
+    Difficulty : {{ halstead.difficulty.toFixed(2) }} <br>
+    Est # bugs : {{ halstead.bugs.toFixed(2) }}<br>
+  </div>
+</script>
+
+<script type="text/javascript" src="../../assets/scripts/bundles/core-bundle.js"></script>
+<script type="text/javascript" src="../../assets/scripts/bundles/codemirror.js"></script>
+<script type="text/javascript" src="../../assets/scripts/codemirror.markpopovertext.js"></script>
+<script type="text/javascript" src="report.js"></script>
+<script type="text/javascript" src="report.history.js"></script>
+<script type="text/javascript" src="../../assets/scripts/plato-file.js"></script>
+</body>
+</html>

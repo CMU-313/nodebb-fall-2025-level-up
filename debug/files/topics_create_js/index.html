@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Plato - topics/create.js</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="">
+  <meta name="author" content="">
+
+  <!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+
+  <link href="../../assets/css/vendor/morris.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/bootstrap.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/font-awesome.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/codemirror.css" rel="stylesheet">
+  <link href="../../assets/css/plato.css" rel="stylesheet">
+  <link href="../../assets/css/plato-file.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="navbar navbar-fixed-top">
+  <div class="container">
+    <a class="navbar-brand" href="http://github.com/es-analysis/plato">Plato on Github</a>
+    <ul class="nav navbar-nav">
+      <li>
+        <a href="../../index.html">Report Home</a>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<div class="jumbotron">
+  <div class="container">
+    <h1>topics/create.js</h1>
+  </div>
+</div>
+
+<div class="container aggregate-stats">
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Maintainability <a href="http://blogs.msdn.com/b/codeanalysis/archive/2007/11/20/maintainability-index-range-and-meaning.aspx"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="A value between 0 and 100 that represents the relative ease of maintaining the code. A high value means better maintainability." data-original-title="Maintainability Index"  data-container="body"></i></a></h2>
+      <p class="stat">54.64</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Lines of code <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h2>
+      <p class="stat">347</p>
+    </div>
+  </div>
+  <div class="row historical">
+    <div class="col-md-6">
+      <p id="chart_historical_maint" class="chart"></p>
+    </div>
+    <div class="col-md-6">
+      <p id="chart_historical_sloc" class="chart"></p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Difficulty  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="The difficulty measure is related to the difficulty of the program to write or understand." data-original-title="Difficulty" data-container="body"></i></a></h2>
+      <p class="stat">54.48</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Estimated Errors  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Halstead's delivered bugs is an estimate for the number of errors in the implementation." data-original-title="Delivered Bugs" data-container="body"></i></a></h2>
+      <p class="stat">4.62</p>
+    </div>
+  </div>
+</div>
+
+<div class="container charts">
+  <div class="row">
+    <h2 class="header">Function weight</h2>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h3 class="chart-header">By Complexity <a href="http://en.wikipedia.org/wiki/Cyclomatic_complexity"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="This metric counts the number of distinct paths through a block of code. Lower values are better." data-original-title="Cyclomatic Complexity" data-container="body"></i></a></h3>
+      <div id="fn-by-complexity" class="stat"></div>
+    </div>
+    <div class="col-md-6">
+      <h3 class="chart-header">By SLOC  <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h3>
+      <div id="fn-by-sloc" class="stat"></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="row">
+    <textarea id="file-source" class="col-md-12">&#039;use strict&#039;;
+
+const _ = require(&#039;lodash&#039;);
+const winston = require(&#039;winston&#039;);
+
+const db = require(&#039;../database&#039;);
+const utils = require(&#039;../utils&#039;);
+const slugify = require(&#039;../slugify&#039;);
+const plugins = require(&#039;../plugins&#039;);
+const analytics = require(&#039;../analytics&#039;);
+const user = require(&#039;../user&#039;);
+const activitypub = require(&#039;../activitypub&#039;);
+const meta = require(&#039;../meta&#039;);
+const posts = require(&#039;../posts&#039;);
+const privileges = require(&#039;../privileges&#039;);
+const categories = require(&#039;../categories&#039;);
+const translator = require(&#039;../translator&#039;);
+
+module.exports = function (Topics) {
+	Topics.create = async function (data) {
+		// This is an internal method, consider using Topics.post instead
+		const timestamp = data.timestamp || Date.now();
+
+		const tid = data.tid || await db.incrObjectField(&#039;global&#039;, &#039;nextTid&#039;);
+
+		let topicData = {
+			tid: tid,
+			uid: data.uid,
+			cid: data.cid,
+			mainPid: 0,
+			title: data.title,
+			slug: `${tid}/${slugify(data.title) || &#039;topic&#039;}`,
+			timestamp: timestamp,
+			lastposttime: 0,
+			postcount: 0,
+			viewcount: 0,
+			anonymous: data.anonymous ? 1 : 0,
+			private: data.private ? 1 : 0,
+		};
+
+		if (Array.isArray(data.tags) &amp;&amp; data.tags.length) {
+			topicData.tags = data.tags.join(&#039;,&#039;);
+		}
+
+		const result = await plugins.hooks.fire(&#039;filter:topic.create&#039;, { topic: topicData, data: data });
+		topicData = result.topic;
+		await db.setObject(`topic:${topicData.tid}`, topicData);
+
+		const timestampedSortedSetKeys = [
+			&#039;topics:tid&#039;,
+			`cid:${topicData.cid}:tids`,
+			`cid:${topicData.cid}:tids:create`,
+			`cid:${topicData.cid}:uid:${topicData.uid}:tids`,
+		];
+		const countedSortedSetKeys = [
+			...[&#039;views&#039;, &#039;posts&#039;, &#039;votes&#039;].map(prop =&gt; `${utils.isNumber(tid) ? &#039;topics&#039; : &#039;topicsRemote&#039;}:${prop}`),
+			`cid:${topicData.cid}:tids:votes`,
+			`cid:${topicData.cid}:tids:posts`,
+			`cid:${topicData.cid}:tids:views`,
+		];
+
+		const scheduled = timestamp &gt; Date.now();
+		if (scheduled) {
+			timestampedSortedSetKeys.push(&#039;topics:scheduled&#039;);
+		}
+
+		await Promise.all([
+			db.sortedSetsAdd(timestampedSortedSetKeys, timestamp, topicData.tid),
+			db.sortedSetsAdd(countedSortedSetKeys, 0, topicData.tid),
+			user.addTopicIdToUser(topicData.uid, topicData.tid, timestamp),
+			db.incrObjectField(`${utils.isNumber(topicData.cid) ? &#039;category&#039; : &#039;categoryRemote&#039;}:${topicData.cid}`, &#039;topic_count&#039;),
+			utils.isNumber(tid) ? db.incrObjectField(&#039;global&#039;, &#039;topicCount&#039;) : null,
+			Topics.createTags(data.tags, topicData.tid, timestamp),
+			scheduled ? Promise.resolve() : categories.updateRecentTid(topicData.cid, topicData.tid),
+		]);
+		if (scheduled) {
+			await Topics.scheduled.pin(tid, topicData);
+		}
+
+		plugins.hooks.fire(&#039;action:topic.save&#039;, { topic: _.clone(topicData), data: data });
+		return topicData.tid;
+	};
+
+	Topics.post = async function (data) {
+		data = await plugins.hooks.fire(&#039;filter:topic.post&#039;, data);
+		const { uid } = data;
+
+		const [categoryExists, canCreate, canTag, isAdmin] = await Promise.all([
+			parseInt(data.cid, 10) &gt; 0 ? categories.exists(data.cid) : true,
+			privileges.categories.can(&#039;topics:create&#039;, data.cid, uid),
+			privileges.categories.can(&#039;topics:tag&#039;, data.cid, uid),
+			privileges.users.isAdministrator(uid),
+		]);
+
+		data.title = String(data.title).trim();
+		data.tags = data.tags || [];
+		data.content = String(data.content || &#039;&#039;).trimEnd();
+		if (!isAdmin) {
+			Topics.checkTitle(data.title);
+		}
+
+		await Topics.validateTags(data.tags, data.cid, uid);
+		data.tags = await Topics.filterTags(data.tags, data.cid);
+		if (!data.fromQueue &amp;&amp; !isAdmin) {
+			Topics.checkContent(data.sourceContent || data.content);
+			if (!await posts.canUserPostContentWithLinks(uid, data.content)) {
+				throw new Error(`[[error:not-enough-reputation-to-post-links, ${meta.config[&#039;min:rep:post-links&#039;]}]]`);
+			}
+		}
+
+		if (!categoryExists) {
+			throw new Error(&#039;[[error:no-category]]&#039;);
+		}
+
+		if (!canCreate || (!canTag &amp;&amp; data.tags.length)) {
+			throw new Error(&#039;[[error:no-privileges]]&#039;);
+		}
+
+		await guestHandleValid(data);
+		if (!data.fromQueue) {
+			await user.isReadyToPost(uid, data.cid);
+		}
+
+		const tid = await Topics.create(data);
+
+		let postData = data;
+		postData.tid = tid;
+		postData.ip = data.req ? data.req.ip : null;
+		postData.isMain = true;
+		postData = await posts.create(postData);
+		postData = await onNewPost(postData, data);
+
+		const [settings, topics] = await Promise.all([
+			user.getSettings(uid),
+			Topics.getTopicsByTids([postData.tid], uid),
+		]);
+
+		if (!Array.isArray(topics) || !topics.length) {
+			throw new Error(&#039;[[error:no-topic]]&#039;);
+		}
+
+		if (utils.isNumber(uid) &amp;&amp; uid &gt; 0 &amp;&amp; settings.followTopicsOnCreate) {
+			await Topics.follow(postData.tid, uid);
+		}
+		const topicData = topics[0];
+		topicData.unreplied = true;
+		topicData.mainPost = postData;
+		topicData.index = 0;
+		postData.index = 0;
+
+		if (topicData.scheduled) {
+			await Topics.delete(tid);
+		}
+
+		analytics.increment([&#039;topics&#039;, `topics:byCid:${topicData.cid}`]);
+		plugins.hooks.fire(&#039;action:topic.post&#039;, { topic: topicData, post: postData, data: data });
+
+		if (!topicData.scheduled) {
+			setImmediate(async () =&gt; {
+				try {
+					if (utils.isNumber(uid)) {
+						// New topic notifications only sent for local-to-local follows only
+						await user.notifications.sendTopicNotificationToFollowers(uid, topicData, postData);
+					}
+
+					await Topics.notifyTagFollowers(postData, uid);
+					await categories.notifyCategoryFollowers(postData, uid);
+				} catch (err) {
+					winston.error(err.stack);
+				}
+			});
+		}
+
+		// Convert anonymous field to boolean for API consistency
+		if (postData &amp;&amp; postData.anonymous !== undefined) {
+			postData.anonymous = parseInt(postData.anonymous, 10) === 1;
+		}
+
+		return {
+			topicData: topicData,
+			postData: postData,
+		};
+	};
+
+	Topics.reply = async function (data) {
+		data = await plugins.hooks.fire(&#039;filter:topic.reply&#039;, data);
+		const { tid, uid } = data;
+
+		const [topicData, isAdmin] = await Promise.all([
+			Topics.getTopicFields(tid, [&#039;cid&#039;, &#039;uid&#039;, &#039;anonymous&#039;, &#039;deleted&#039;, &#039;locked&#039;, &#039;scheduled&#039;, &#039;pinned&#039;, &#039;slug&#039;, &#039;lastposttime&#039;]),
+			privileges.users.isAdministrator(uid),
+		]);
+
+		await canReply(data, topicData);
+
+		data.cid = topicData.cid;
+
+		await guestHandleValid(data);
+		data.content = String(data.content || &#039;&#039;).trimEnd();
+
+		if (!data.fromQueue &amp;&amp; !isAdmin) {
+			await user.isReadyToPost(uid, data.cid);
+			Topics.checkContent(data.sourceContent || data.content);
+			if (!await posts.canUserPostContentWithLinks(uid, data.content)) {
+				throw new Error(`[[error:not-enough-reputation-to-post-links, ${meta.config[&#039;min:rep:post-links&#039;]}]]`);
+			}
+		}
+
+		// For replies to scheduled topics, don&#039;t have a timestamp older than topic&#039;s itself
+		if (topicData.scheduled) {
+			data.timestamp = topicData.lastposttime + 1;
+		}
+
+		data.ip = data.req ? data.req.ip : null;
+		
+		// Check if topic is anonymous and poster is the topic author for replies
+		const isTopicAnonymous = parseInt(topicData.anonymous, 10) === 1;
+		const isTopicAuthor = parseInt(topicData.uid, 10) === parseInt(uid, 10);
+		if (isTopicAnonymous &amp;&amp; isTopicAuthor) {
+			data.anonymous = 1;
+		}
+		
+		let postData = await posts.create(data);
+		postData = await onNewPost(postData, data);
+
+		const settings = await user.getSettings(uid);
+		if (uid &gt; 0 &amp;&amp; settings.followTopicsOnReply) {
+			await Topics.follow(postData.tid, uid);
+		}
+
+		if (parseInt(uid, 10) || activitypub.helpers.isUri(uid)) {
+			user.setUserField(uid, &#039;lastonline&#039;, Date.now());
+		}
+
+		if (parseInt(uid, 10) || activitypub.helpers.isUri(uid) || meta.config.allowGuestReplyNotifications) {
+			setImmediate(async () =&gt; {
+				try {
+					await Topics.notifyFollowers(postData, uid, {
+						type: &#039;new-reply&#039;,
+						bodyShort: translator.compile(&#039;notifications:user-posted-to&#039;, postData.user.displayname, postData.topic.title),
+						nid: `new_post:tid:${postData.topic.tid}:pid:${postData.pid}:uid:${uid}`,
+						mergeId: `notifications:user-posted-to|${postData.topic.tid}`,
+					});
+				} catch (err) {
+					winston.error(err.stack);
+				}
+			});
+		}
+
+		analytics.increment([&#039;posts&#039;, `posts:byCid:${data.cid}`]);
+		plugins.hooks.fire(&#039;action:topic.reply&#039;, { post: _.clone(postData), data: data });
+
+		// Convert anonymous field to boolean for API consistency
+		if (postData.anonymous !== undefined) {
+			postData.anonymous = parseInt(postData.anonymous, 10) === 1;
+		}
+
+		return postData;
+	};
+
+	async function onNewPost({ pid, tid, uid: postOwner }, { uid, handle }) {
+		const [[postData], [userInfo]] = await Promise.all([
+			posts.getPostSummaryByPids([pid], uid, {}),
+			posts.getUserInfoForPosts([postOwner], uid),
+		]);
+		await Promise.all([
+			Topics.addParentPosts([postData], uid),
+			Topics.syncBacklinks(postData),
+			Topics.markAsRead([tid], uid),
+		]);
+
+		// Returned data is a superset of post summary data
+		postData.user = userInfo;
+		postData.index = postData.topic.postcount - 1;
+		postData.bookmarked = false;
+		postData.display_edit_tools = true;
+		postData.display_delete_tools = true;
+		postData.display_moderator_tools = true;
+		postData.display_move_tools = true;
+		postData.selfPost = false;
+		posts.overrideGuestHandle(postData, handle);
+		return postData;
+	}
+
+	Topics.checkTitle = function (title) {
+		check(title, meta.config.minimumTitleLength, meta.config.maximumTitleLength, &#039;title-too-short&#039;, &#039;title-too-long&#039;);
+	};
+
+	Topics.checkContent = function (content) {
+		check(content, meta.config.minimumPostLength, meta.config.maximumPostLength, &#039;content-too-short&#039;, &#039;content-too-long&#039;);
+	};
+
+	function check(item, min, max, minError, maxError) {
+		// Trim and remove HTML (latter for composers that send in HTML, like redactor)
+		if (typeof item === &#039;string&#039;) {
+			item = utils.stripHTMLTags(item).trim();
+		}
+
+		if (item === null || item === undefined || item.length &lt; parseInt(min, 10)) {
+			throw new Error(`[[error:${minError}, ${min}]]`);
+		} else if (item.length &gt; parseInt(max, 10)) {
+			throw new Error(`[[error:${maxError}, ${max}]]`);
+		}
+	}
+
+	async function guestHandleValid(data) {
+		if (meta.config.allowGuestHandles &amp;&amp; parseInt(data.uid, 10) === 0 &amp;&amp; data.handle) {
+			if (data.handle.length &gt; meta.config.maximumUsernameLength) {
+				throw new Error(&#039;[[error:guest-handle-invalid]]&#039;);
+			}
+			const exists = await user.existsBySlug(slugify(data.handle));
+			if (exists) {
+				throw new Error(&#039;[[error:username-taken]]&#039;);
+			}
+		}
+	}
+
+	async function canReply(data, topicData) {
+		if (!topicData || !topicData.cid) {
+			throw new Error(&#039;[[error:no-topic]]&#039;);
+		}
+		const { tid, uid } = data;
+		const { cid, deleted, locked, scheduled } = topicData;
+
+		const [canReply, canSchedule, isAdminOrMod] = await Promise.all([
+			privileges.topics.can(&#039;topics:reply&#039;, tid, uid),
+			privileges.topics.can(&#039;topics:schedule&#039;, tid, uid),
+			privileges.categories.isAdminOrMod(cid, uid),
+		]);
+
+		if (locked &amp;&amp; !isAdminOrMod) {
+			throw new Error(&#039;[[error:topic-locked]]&#039;);
+		}
+
+		if (!scheduled &amp;&amp; deleted &amp;&amp; !isAdminOrMod) {
+			throw new Error(&#039;[[error:topic-deleted]]&#039;);
+		}
+
+		if (scheduled &amp;&amp; !canSchedule) {
+			throw new Error(&#039;[[error:no-privileges]]&#039;);
+		}
+
+		if (!canReply) {
+			throw new Error(&#039;[[error:no-privileges]]&#039;);
+		}
+	}
+};</textarea>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="container">
+    <p>.</p>
+  </div>
+</footer>
+
+<script type="text/html" id="complexity-popover-template">
+  <div class="complexity-notice">
+    Complexity : {{ cyclomatic }} <br>
+    Length : {{ halstead.length }} <br>
+    Difficulty : {{ halstead.difficulty.toFixed(2) }} <br>
+    Est # bugs : {{ halstead.bugs.toFixed(2) }}<br>
+  </div>
+</script>
+
+<script type="text/javascript" src="../../assets/scripts/bundles/core-bundle.js"></script>
+<script type="text/javascript" src="../../assets/scripts/bundles/codemirror.js"></script>
+<script type="text/javascript" src="../../assets/scripts/codemirror.markpopovertext.js"></script>
+<script type="text/javascript" src="report.js"></script>
+<script type="text/javascript" src="report.history.js"></script>
+<script type="text/javascript" src="../../assets/scripts/plato-file.js"></script>
+</body>
+</html>

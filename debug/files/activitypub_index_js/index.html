@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Plato - activitypub/index.js</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="">
+  <meta name="author" content="">
+
+  <!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+
+  <link href="../../assets/css/vendor/morris.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/bootstrap.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/font-awesome.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/codemirror.css" rel="stylesheet">
+  <link href="../../assets/css/plato.css" rel="stylesheet">
+  <link href="../../assets/css/plato-file.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="navbar navbar-fixed-top">
+  <div class="container">
+    <a class="navbar-brand" href="http://github.com/es-analysis/plato">Plato on Github</a>
+    <ul class="nav navbar-nav">
+      <li>
+        <a href="../../index.html">Report Home</a>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<div class="jumbotron">
+  <div class="container">
+    <h1>activitypub/index.js</h1>
+  </div>
+</div>
+
+<div class="container aggregate-stats">
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Maintainability <a href="http://blogs.msdn.com/b/codeanalysis/archive/2007/11/20/maintainability-index-range-and-meaning.aspx"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="A value between 0 and 100 that represents the relative ease of maintaining the code. A high value means better maintainability." data-original-title="Maintainability Index"  data-container="body"></i></a></h2>
+      <p class="stat">63.45</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Lines of code <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h2>
+      <p class="stat">619</p>
+    </div>
+  </div>
+  <div class="row historical">
+    <div class="col-md-6">
+      <p id="chart_historical_maint" class="chart"></p>
+    </div>
+    <div class="col-md-6">
+      <p id="chart_historical_sloc" class="chart"></p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Difficulty  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="The difficulty measure is related to the difficulty of the program to write or understand." data-original-title="Difficulty" data-container="body"></i></a></h2>
+      <p class="stat">61.29</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Estimated Errors  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Halstead's delivered bugs is an estimate for the number of errors in the implementation." data-original-title="Delivered Bugs" data-container="body"></i></a></h2>
+      <p class="stat">7.46</p>
+    </div>
+  </div>
+</div>
+
+<div class="container charts">
+  <div class="row">
+    <h2 class="header">Function weight</h2>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h3 class="chart-header">By Complexity <a href="http://en.wikipedia.org/wiki/Cyclomatic_complexity"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="This metric counts the number of distinct paths through a block of code. Lower values are better." data-original-title="Cyclomatic Complexity" data-container="body"></i></a></h3>
+      <div id="fn-by-complexity" class="stat"></div>
+    </div>
+    <div class="col-md-6">
+      <h3 class="chart-header">By SLOC  <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h3>
+      <div id="fn-by-sloc" class="stat"></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="row">
+    <textarea id="file-source" class="col-md-12">&#039;use strict&#039;;
+
+const nconf = require(&#039;nconf&#039;);
+const winston = require(&#039;winston&#039;);
+const { createHash, createSign, createVerify, getHashes } = require(&#039;crypto&#039;);
+const { CronJob } = require(&#039;cron&#039;);
+
+const request = require(&#039;../request&#039;);
+const db = require(&#039;../database&#039;);
+const meta = require(&#039;../meta&#039;);
+const categories = require(&#039;../categories&#039;);
+const posts = require(&#039;../posts&#039;);
+const messaging = require(&#039;../messaging&#039;);
+const user = require(&#039;../user&#039;);
+const utils = require(&#039;../utils&#039;);
+const ttl = require(&#039;../cache/ttl&#039;);
+const lru = require(&#039;../cache/lru&#039;);
+const batch = require(&#039;../batch&#039;);
+const pubsub = require(&#039;../pubsub&#039;);
+const analytics = require(&#039;../analytics&#039;);
+
+const requestCache = ttl({
+	max: 5000,
+	ttl: 1000 * 60 * 5, // 5 minutes
+});
+const probeCache = ttl({
+	max: 500,
+	ttl: 1000 * 60 * 60, // 1 hour
+});
+const probeRateLimit = ttl({
+	ttl: 1000 * 3, // 3 seconds
+});
+
+const ActivityPub = module.exports;
+
+ActivityPub._constants = Object.freeze({
+	uid: -2,
+	publicAddress: &#039;https://www.w3.org/ns/activitystreams#Public&#039;,
+	acceptableTypes: [
+		&#039;application/activity+json&#039;,
+		&#039;application/ld+json; profile=&quot;https://www.w3.org/ns/activitystreams&quot;&#039;,
+	],
+	acceptedPostTypes: [
+		&#039;Note&#039;, &#039;Page&#039;, &#039;Article&#039;, &#039;Question&#039;, &#039;Video&#039;,
+	],
+	acceptableActorTypes: new Set([&#039;Application&#039;, &#039;Organization&#039;, &#039;Person&#039;, &#039;Service&#039;]),
+	acceptableGroupTypes: new Set([&#039;Group&#039;]),
+	requiredActorProps: [&#039;inbox&#039;, &#039;outbox&#039;],
+	acceptedProtocols: [&#039;https&#039;, ...(process.env.CI === &#039;true&#039; ? [&#039;http&#039;] : [])],
+	acceptable: {
+		customFields: new Set([&#039;PropertyValue&#039;, &#039;Link&#039;, &#039;Note&#039;]),
+		contextTypes: new Set([&#039;Collection&#039;, &#039;CollectionPage&#039;, &#039;OrderedCollection&#039;, &#039;OrderedCollectionPage&#039;]),
+	},
+});
+ActivityPub._cache = requestCache;
+ActivityPub._sent = new Map(); // used only in local tests
+
+ActivityPub.helpers = require(&#039;./helpers&#039;);
+ActivityPub.inbox = require(&#039;./inbox&#039;);
+ActivityPub.mocks = require(&#039;./mocks&#039;);
+ActivityPub.notes = require(&#039;./notes&#039;);
+ActivityPub.contexts = require(&#039;./contexts&#039;);
+ActivityPub.actors = require(&#039;./actors&#039;);
+ActivityPub.instances = require(&#039;./instances&#039;);
+ActivityPub.feps = require(&#039;./feps&#039;);
+
+ActivityPub.startJobs = () =&gt; {
+	ActivityPub.helpers.log(&#039;[activitypub/jobs] Registering jobs.&#039;);
+	new CronJob(&#039;0 0 * * *&#039;, async () =&gt; {
+		if (!meta.config.activitypubEnabled) {
+			return;
+		}
+		try {
+			await ActivityPub.notes.prune();
+			await db.sortedSetsRemoveRangeByScore([&#039;activities:datetime&#039;], &#039;-inf&#039;, Date.now() - 604800000);
+		} catch (err) {
+			winston.error(err.stack);
+		}
+	}, null, true, null, null, false); // change last argument to true for debugging
+
+	new CronJob(&#039;*/30 * * * *&#039;, async () =&gt; {
+		if (!meta.config.activitypubEnabled) {
+			return;
+		}
+		try {
+			await ActivityPub.actors.prune();
+		} catch (err) {
+			winston.error(err.stack);
+		}
+	}, null, true, null, null, false); // change last argument to true for debugging
+};
+
+ActivityPub.resolveId = async (uid, id) =&gt; {
+	try {
+		const query = new URL(id);
+		({ id } = await ActivityPub.get(&#039;uid&#039;, uid, id));
+		const response = new URL(id);
+
+		if (query.host !== response.host) {
+			winston.warn(`[activitypub/resolveId] id resolution domain mismatch: ${query.href} != ${response.href}`);
+			return null;
+		}
+
+		return id;
+	} catch (e) {
+		return null;
+	}
+};
+
+ActivityPub.resolveInboxes = async (ids) =&gt; {
+	const inboxes = new Set();
+
+	if (!meta.config.activitypubAllowLoopback) {
+		ids = ids.filter((id) =&gt; {
+			const { hostname } = new URL(id);
+			return hostname !== nconf.get(&#039;url_parsed&#039;).hostname;
+		});
+	}
+
+	await ActivityPub.actors.assert(ids);
+
+	// Remove non-asserted targets
+	const exists = await db.isSortedSetMembers(&#039;usersRemote:lastCrawled&#039;, ids);
+	ids = ids.filter((_, idx) =&gt; exists[idx]);
+
+	await batch.processArray(ids, async (currentIds) =&gt; {
+		const isCategory = await db.exists(currentIds.map(id =&gt; `categoryRemote:${id}`));
+		const [cids, uids] = currentIds.reduce(([cids, uids], id, idx) =&gt; {
+			const array = isCategory[idx] ? cids : uids;
+			array.push(id);
+			return [cids, uids];
+		}, [[], []]);
+		const categoryData = await categories.getCategoriesFields(cids, [&#039;inbox&#039;, &#039;sharedInbox&#039;]);
+		const userData = await user.getUsersFields(uids, [&#039;inbox&#039;, &#039;sharedInbox&#039;]);
+
+		currentIds.forEach((id) =&gt; {
+			if (cids.includes(id)) {
+				const data = categoryData[cids.indexOf(id)];
+				inboxes.add(data.sharedInbox || data.inbox);
+			} else if (uids.includes(id)) {
+				const data = userData[uids.indexOf(id)];
+				inboxes.add(data.sharedInbox || data.inbox);
+			}
+		});
+	}, {
+		batch: 500,
+	});
+
+	return Array.from(inboxes);
+};
+
+ActivityPub.getPublicKey = async (type, id) =&gt; {
+	let publicKey;
+
+	try {
+		({ publicKey } = await db.getObject(`${type}:${id}:keys`));
+	} catch (e) {
+		({ publicKey } = await ActivityPub.helpers.generateKeys(type, id));
+	}
+
+	return publicKey;
+};
+
+ActivityPub.getPrivateKey = async (type, id) =&gt; {
+	// Sanity checking
+	if (![&#039;cid&#039;, &#039;uid&#039;].includes(type) || !utils.isNumber(id) || parseInt(id, 10) &lt; 0) {
+		throw new Error(&#039;[[error:invalid-data]]&#039;);
+	}
+	id = parseInt(id, 10);
+	let privateKey;
+
+	try {
+		({ privateKey } = await db.getObject(`${type}:${id}:keys`));
+	} catch (e) {
+		({ privateKey } = await ActivityPub.helpers.generateKeys(type, id));
+	}
+
+	let keyId;
+	if (type === &#039;uid&#039;) {
+		keyId = `${nconf.get(&#039;url&#039;)}${id &gt; 0 ? `/uid/${id}` : &#039;/actor&#039;}#key`;
+	} else {
+		keyId = `${nconf.get(&#039;url&#039;)}/category/${id}#key`;
+	}
+
+	return { key: privateKey, keyId };
+};
+
+ActivityPub.fetchPublicKey = async (uri) =&gt; {
+	// Used for retrieving the public key from the passed-in keyId uri
+	const body = await ActivityPub.get(&#039;uid&#039;, 0, uri);
+
+	if (!body.hasOwnProperty(&#039;publicKey&#039;)) {
+		throw new Error(&#039;[[error:activitypub.pubKey-not-found]]&#039;);
+	}
+
+	return body.publicKey;
+};
+
+ActivityPub.sign = async ({ key, keyId }, url, payload) =&gt; {
+	// Returns string for use in &#039;Signature&#039; header
+	const { host, pathname } = new URL(url);
+	const date = new Date().toUTCString();
+	let digest = null;
+
+	let headers = &#039;(request-target) host date&#039;;
+	let signed_string = `(request-target): ${payload ? &#039;post&#039; : &#039;get&#039;} ${pathname}\nhost: ${host}\ndate: ${date}`;
+
+	// Calculate payload hash if payload present
+	if (payload) {
+		const payloadHash = createHash(&#039;sha256&#039;);
+		payloadHash.update(JSON.stringify(payload));
+		digest = `SHA-256=${payloadHash.digest(&#039;base64&#039;)}`;
+		headers += &#039; digest&#039;;
+		signed_string += `\ndigest: ${digest}`;
+	}
+
+	// Sign string using private key
+	let signature = createSign(&#039;sha256&#039;);
+	signature.update(signed_string);
+	signature.end();
+	signature = signature.sign(key, &#039;base64&#039;);
+
+	// Construct signature header
+	return {
+		date,
+		digest,
+		signature: `keyId=&quot;${keyId}&quot;,headers=&quot;${headers}&quot;,signature=&quot;${signature}&quot;,algorithm=&quot;hs2019&quot;`,
+	};
+};
+
+ActivityPub.verify = async (req) =&gt; {
+	ActivityPub.helpers.log(&#039;[activitypub/verify] Starting signature verification...&#039;);
+	if (!req.headers.hasOwnProperty(&#039;signature&#039;)) {
+		ActivityPub.helpers.log(&#039;[activitypub/verify]   Failed, no signature header.&#039;);
+		return false;
+	}
+
+	// Verify the signature string via public key
+	try {
+		// Break the signature apart
+		let { keyId, headers, signature, algorithm, created, expires } = req.headers.signature.split(&#039;,&#039;).reduce((memo, cur) =&gt; {
+			const split = cur.split(&#039;=&quot;&#039;);
+			const key = split.shift();
+			const value = split.join(&#039;=&quot;&#039;);
+			memo[key] = value.slice(0, -1);
+			return memo;
+		}, {});
+
+		const acceptableHashes = getHashes();
+		if (algorithm === &#039;hs2019&#039; || !acceptableHashes.includes(algorithm)) {
+			algorithm = &#039;sha256&#039;;
+		}
+
+		// Re-construct signature string
+		const signed_string = headers.split(&#039; &#039;).reduce((memo, cur) =&gt; {
+			switch (cur) {
+				case &#039;(request-target)&#039;: {
+					memo.push(`${cur}: ${String(req.method).toLowerCase()} ${req.baseUrl}${req.path}`);
+					break;
+				}
+
+				case &#039;(created)&#039;: {
+					memo.push(`${cur}: ${created}`);
+					break;
+				}
+
+				case &#039;(expires)&#039;: {
+					memo.push(`${cur}: ${expires}`);
+					break;
+				}
+
+				default: {
+					memo.push(`${cur}: ${req.headers[cur]}`);
+					break;
+				}
+			}
+
+			return memo;
+		}, []).join(&#039;\n&#039;);
+
+		// Retrieve public key from remote instance
+		ActivityPub.helpers.log(`[activitypub/verify] Retrieving pubkey for ${keyId}`);
+		const { publicKeyPem } = await ActivityPub.fetchPublicKey(keyId);
+
+		const verify = createVerify(&#039;sha256&#039;);
+		verify.update(signed_string);
+		verify.end();
+		ActivityPub.helpers.log(&#039;[activitypub/verify] Attempting signed string verification&#039;);
+		const verified = verify.verify(publicKeyPem, signature, &#039;base64&#039;);
+		return verified;
+	} catch (e) {
+		ActivityPub.helpers.log(&#039;[activitypub/verify]   Failed, key retrieval or verification failure.&#039;);
+		return false;
+	}
+};
+
+ActivityPub.get = async (type, id, uri, options) =&gt; {
+	if (!meta.config.activitypubEnabled) {
+		throw new Error(&#039;[[error:activitypub.not-enabled]]&#039;);
+	}
+
+	options = {
+		cache: true,
+		...options,
+	};
+	const cacheKey = [id, uri].join(&#039;;&#039;);
+	const cached = requestCache.get(cacheKey);
+	if (options.cache &amp;&amp; cached !== undefined) {
+		return cached;
+	}
+
+	const keyData = await ActivityPub.getPrivateKey(type, id);
+	const headers = id &gt;= 0 ? await ActivityPub.sign(keyData, uri) : {};
+	ActivityPub.helpers.log(`[activitypub/get] ${uri}`);
+	try {
+		const { response, body } = await request.get(uri, {
+			headers: {
+				...headers,
+				...options.headers,
+				Accept: &#039;application/ld+json; profile=&quot;https://www.w3.org/ns/activitystreams&quot;&#039;,
+			},
+			timeout: 5000,
+		});
+
+		if (!String(response.statusCode).startsWith(&#039;2&#039;)) {
+			winston.verbose(`[activitypub/get] Received ${response.statusCode} when querying ${uri}`);
+			if (body.hasOwnProperty(&#039;error&#039;)) {
+				winston.verbose(`[activitypub/get] Error received: ${body.error}`);
+			}
+
+			const e = new Error(`[[error:activitypub.get-failed]]`);
+			e.code = `ap_get_${response.statusCode}`;
+			throw e;
+		}
+
+		requestCache.set(cacheKey, body);
+		return body;
+	} catch (e) {
+		if (String(e.code).startsWith(&#039;ap_get_&#039;)) {
+			throw e;
+		}
+
+		// Handle things like non-json body, etc.
+		const { cause } = e;
+		throw new Error(`[[error:activitypub.get-failed]]`, { cause });
+	}
+};
+
+ActivityPub.retryQueue = lru({
+	name: &#039;activitypub-retry-queue&#039;,
+	max: 4000,
+	ttl: 1000 * 60 * 60 * 24 * 60,
+	dispose: (value) =&gt; {
+		if (value) {
+			clearTimeout(value);
+		}
+	},
+});
+
+// handle clearing retry queue from another member of the cluster
+pubsub.on(`activitypub-retry-queue:lruCache:del`, (keys) =&gt; {
+	if (Array.isArray(keys)) {
+		keys.forEach(key =&gt; clearTimeout(ActivityPub.retryQueue.get(key)));
+	}
+});
+
+async function sendMessage(uri, id, type, payload, attempts = 1) {
+	const keyData = await ActivityPub.getPrivateKey(type, id);
+	const headers = await ActivityPub.sign(keyData, uri, payload);
+
+	try {
+		const { response, body } = await request.post(uri, {
+			headers: {
+				...headers,
+				&#039;content-type&#039;: &#039;application/ld+json; profile=&quot;https://www.w3.org/ns/activitystreams&quot;&#039;,
+			},
+			body: payload,
+			timeout: 10000, // configurable?
+		});
+
+		if (String(response.statusCode).startsWith(&#039;2&#039;)) {
+			ActivityPub.helpers.log(`[activitypub/send] Successfully sent ${payload.type} to ${uri}`);
+		} else {
+			if (typeof body === &#039;object&#039;) {
+				throw new Error(JSON.stringify(body));
+			}
+			throw new Error(String(body));
+		}
+	} catch (e) {
+		ActivityPub.helpers.log(`[activitypub/send] Could not send ${payload.type} to ${uri}; error: ${e.message}`);
+		// add to retry queue
+		if (attempts &lt; 12) { // stop attempting after ~2 months
+			const timeout = (4 ** attempts) * 1000; // exponential backoff
+			const queueId = `${payload.type}:${payload.id}:${new URL(uri).hostname}`;
+			const timeoutId = setTimeout(() =&gt; sendMessage(uri, id, type, payload, attempts + 1), timeout);
+			ActivityPub.retryQueue.set(queueId, timeoutId);
+
+			ActivityPub.helpers.log(`[activitypub/send] Added ${payload.type} to ${uri} to retry queue for ${timeout}ms`);
+		} else {
+			winston.warn(`[activitypub/send] Max attempts reached for ${payload.type} to ${uri}; giving up on sending`);
+		}
+	}
+}
+
+ActivityPub.send = async (type, id, targets, payload) =&gt; {
+	if (!meta.config.activitypubEnabled) {
+		return ActivityPub.helpers.log(&#039;[activitypub/send] Federation not enabled; not sending.&#039;);
+	}
+
+	ActivityPub.helpers.log(`[activitypub/send] ${payload.id}`);
+
+	if (process.env.hasOwnProperty(&#039;CI&#039;)) {
+		ActivityPub._sent.set(payload.id, payload);
+	}
+
+	if (!Array.isArray(targets)) {
+		targets = [targets];
+	}
+
+	const inboxes = await ActivityPub.resolveInboxes(targets);
+
+	const actor = ActivityPub.helpers.resolveActor(type, id);
+
+	payload = {
+		&#039;@context&#039;: &#039;https://www.w3.org/ns/activitystreams&#039;,
+		actor,
+		...payload,
+	};
+
+	// Runs in background... potentially a better queue is required... later.
+	batch.processArray(
+		inboxes,
+		async inboxBatch =&gt; Promise.all(inboxBatch.map(async uri =&gt; sendMessage(uri, id, type, payload))),
+		{
+			batch: 50,
+			interval: 100,
+		},
+	);
+};
+
+ActivityPub.record = async ({ id, type, actor }) =&gt; {
+	const now = Date.now();
+	const { hostname } = new URL(actor);
+
+	await Promise.all([
+		db.sortedSetAdd(`activities:datetime`, now, id),
+		db.sortedSetAdd(&#039;domains:lastSeen&#039;, now, hostname),
+		analytics.increment([&#039;activities&#039;, `activities:byType:${type}`, `activities:byHost:${hostname}`]),
+	]);
+};
+
+ActivityPub.buildRecipients = async function (object, { pid, uid, cid }) {
+	/**
+	 * - Builds a list of targets for activitypub.send to consume
+	 * - Extends to and cc since the activity can be addressed more widely
+	 * - Optional parameters:
+	 *     - `cid`: includes followers of the passed-in cid (local only)
+	 *     - `uid`: includes followers of the passed-in uid (local only)
+	 *     - `pid`: includes post announcers and all topic participants
+	 */
+	let { to, cc } = object;
+	to = new Set(to);
+	cc = new Set(cc);
+
+	let followers = [];
+	if (uid) {
+		followers = await db.getSortedSetMembers(`followersRemote:${uid}`);
+		const followersUrl = `${nconf.get(&#039;url&#039;)}/uid/${uid}/followers`;
+		if (!to.has(followersUrl)) {
+			cc.add(followersUrl);
+		}
+	}
+
+	if (cid) {
+		const cidFollowers = await ActivityPub.notes.getCategoryFollowers(cid);
+		followers = followers.concat(cidFollowers);
+		const followersUrl = `${nconf.get(&#039;url&#039;)}/category/${cid}/followers`;
+		if (!to.has(followersUrl)) {
+			cc.add(followersUrl);
+		}
+	}
+
+	const targets = new Set([...followers, ...to, ...cc]);
+
+	// Remove any ids that aren&#039;t asserted actors
+	const exists = await db.isSortedSetMembers(&#039;usersRemote:lastCrawled&#039;, [...targets]);
+	Array.from(targets).forEach((uri, idx) =&gt; {
+		if (!exists[idx]) {
+			targets.delete(uri);
+		}
+	});
+
+	// Topic posters, post announcers and their followers
+	if (pid) {
+		const tid = await posts.getPostField(pid, &#039;tid&#039;);
+		const participants = (await db.getSortedSetMembers(`tid:${tid}:posters`))
+			.filter(uid =&gt; !utils.isNumber(uid)); // remote users only
+		const announcers = (await ActivityPub.notes.announce.list({ pid })).map(({ actor }) =&gt; actor);
+		const auxiliaries = Array.from(new Set([...participants, ...announcers]));
+		const auxiliaryFollowers = (await user.getUsersFields(auxiliaries, [&#039;followersUrl&#039;]))
+			.filter(o =&gt; o.hasOwnProperty(&#039;followersUrl&#039;))
+			.map(({ followersUrl }) =&gt; followersUrl);
+		[...auxiliaries].forEach(uri =&gt; uri &amp;&amp; targets.add(uri));
+		[...auxiliaries, ...auxiliaryFollowers].forEach(uri =&gt; uri &amp;&amp; cc.add(uri));
+	}
+
+	return {
+		to: [...to],
+		cc: [...cc],
+		targets,
+	};
+};
+
+ActivityPub.probe = async ({ uid, url }) =&gt; {
+	/**
+	 * Checks whether a passed-in id or URL is an ActivityPub object and can be mapped to a local representation
+	 *   - `uid` is optional (links to private messages won&#039;t match without uid)
+	 *   - Returns a relative path if already available, true if not, and false otherwise.
+	 */
+
+	// Disable on config setting; restrict lookups to HTTPS-enabled URLs only
+	const { activitypubProbe } = meta.config;
+	const { protocol } = new URL(url);
+	if (!activitypubProbe || protocol !== &#039;https:&#039;) {
+		return false;
+	}
+
+	// Known resources
+	const [isNote, isMessage, isActor, isActorUrl] = await Promise.all([
+		posts.exists(url),
+		messaging.messageExists(url),
+		db.isSortedSetMember(&#039;usersRemote:lastCrawled&#039;, url), // if url is same as id
+		db.isObjectField(&#039;remoteUrl:uid&#039;, url),
+	]);
+	switch (true) {
+		case isNote: {
+			return `/post/${encodeURIComponent(url)}`;
+		}
+
+		case isMessage: {
+			if (uid) {
+				const { roomId } = await messaging.getMessageFields(url, [&#039;roomId&#039;]);
+				const canView = await messaging.canViewMessage(url, roomId, uid);
+				if (canView) {
+					return `/message/${encodeURIComponent(url)}`;
+				}
+			}
+			break;
+		}
+
+		case isActor: {
+			const slug = await user.getUserField(url, &#039;userslug&#039;);
+			return `/user/${slug}`;
+		}
+
+		case isActorUrl: {
+			const uid = await db.getObjectField(&#039;remoteUrl:uid&#039;, url);
+			const slug = await user.getUserField(uid, &#039;userslug&#039;);
+			return `/user/${slug}`;
+		}
+	}
+
+	// Guests not allowed to use expensive logic path
+	if (!uid) {
+		return false;
+	}
+
+	// One request allowed every 3 seconds (configured at top)
+	const limited = probeRateLimit.get(uid);
+	if (limited) {
+		return false;
+	}
+
+	// Cached result
+	if (probeCache.has(url)) {
+		return probeCache.get(url);
+	}
+
+	// Opportunistic HEAD
+	async function checkHeader(timeout) {
+		const { response } = await request.head(url, {
+			timeout,
+		});
+		const { headers } = response;
+		if (headers &amp;&amp; headers.link) {
+			let parts = headers.link.split(&#039;;&#039;);
+			parts.shift();
+			parts = parts
+				.map(p =&gt; p.trim())
+				.reduce((memo, cur) =&gt; {
+					cur = cur.split(&#039;=&#039;);
+					memo[cur[0]] = cur[1].slice(1, -1);
+					return memo;
+				}, {});
+
+			if (parts.rel === &#039;alternate&#039; &amp;&amp; parts.type === &#039;application/activity+json&#039;) {
+				probeCache.set(url, true);
+				return true;
+			}
+		}
+
+		return false;
+	}
+	try {
+		probeRateLimit.set(uid, true);
+		return await checkHeader(meta.config.activitypubProbeTimeout || 2000);
+	} catch (e) {
+		if (e.name === &#039;TimeoutError&#039;) {
+			// Return early but retry for caching purposes
+			checkHeader(1000 * 60).then((result) =&gt; {
+				probeCache.set(url, result);
+			}).catch(err =&gt; ActivityPub.helpers.log(err.stack));
+			return false;
+		}
+	}
+
+	probeCache.set(url, false);
+	return false;
+};</textarea>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="container">
+    <p>.</p>
+  </div>
+</footer>
+
+<script type="text/html" id="complexity-popover-template">
+  <div class="complexity-notice">
+    Complexity : {{ cyclomatic }} <br>
+    Length : {{ halstead.length }} <br>
+    Difficulty : {{ halstead.difficulty.toFixed(2) }} <br>
+    Est # bugs : {{ halstead.bugs.toFixed(2) }}<br>
+  </div>
+</script>
+
+<script type="text/javascript" src="../../assets/scripts/bundles/core-bundle.js"></script>
+<script type="text/javascript" src="../../assets/scripts/bundles/codemirror.js"></script>
+<script type="text/javascript" src="../../assets/scripts/codemirror.markpopovertext.js"></script>
+<script type="text/javascript" src="report.js"></script>
+<script type="text/javascript" src="report.history.js"></script>
+<script type="text/javascript" src="../../assets/scripts/plato-file.js"></script>
+</body>
+</html>

@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Plato - activitypub/inbox.js</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="">
+  <meta name="author" content="">
+
+  <!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+
+  <link href="../../assets/css/vendor/morris.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/bootstrap.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/font-awesome.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/codemirror.css" rel="stylesheet">
+  <link href="../../assets/css/plato.css" rel="stylesheet">
+  <link href="../../assets/css/plato-file.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="navbar navbar-fixed-top">
+  <div class="container">
+    <a class="navbar-brand" href="http://github.com/es-analysis/plato">Plato on Github</a>
+    <ul class="nav navbar-nav">
+      <li>
+        <a href="../../index.html">Report Home</a>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<div class="jumbotron">
+  <div class="container">
+    <h1>activitypub/inbox.js</h1>
+  </div>
+</div>
+
+<div class="container aggregate-stats">
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Maintainability <a href="http://blogs.msdn.com/b/codeanalysis/archive/2007/11/20/maintainability-index-range-and-meaning.aspx"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="A value between 0 and 100 that represents the relative ease of maintaining the code. A high value means better maintainability." data-original-title="Maintainability Index"  data-container="body"></i></a></h2>
+      <p class="stat">49.95</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Lines of code <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h2>
+      <p class="stat">622</p>
+    </div>
+  </div>
+  <div class="row historical">
+    <div class="col-md-6">
+      <p id="chart_historical_maint" class="chart"></p>
+    </div>
+    <div class="col-md-6">
+      <p id="chart_historical_sloc" class="chart"></p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Difficulty  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="The difficulty measure is related to the difficulty of the program to write or understand." data-original-title="Difficulty" data-container="body"></i></a></h2>
+      <p class="stat">87.35</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Estimated Errors  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Halstead's delivered bugs is an estimate for the number of errors in the implementation." data-original-title="Delivered Bugs" data-container="body"></i></a></h2>
+      <p class="stat">7.34</p>
+    </div>
+  </div>
+</div>
+
+<div class="container charts">
+  <div class="row">
+    <h2 class="header">Function weight</h2>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h3 class="chart-header">By Complexity <a href="http://en.wikipedia.org/wiki/Cyclomatic_complexity"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="This metric counts the number of distinct paths through a block of code. Lower values are better." data-original-title="Cyclomatic Complexity" data-container="body"></i></a></h3>
+      <div id="fn-by-complexity" class="stat"></div>
+    </div>
+    <div class="col-md-6">
+      <h3 class="chart-header">By SLOC  <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h3>
+      <div id="fn-by-sloc" class="stat"></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="row">
+    <textarea id="file-source" class="col-md-12">&#039;use strict&#039;;
+
+const winston = require(&#039;winston&#039;);
+const nconf = require(&#039;nconf&#039;);
+
+const db = require(&#039;../database&#039;);
+const privileges = require(&#039;../privileges&#039;);
+const user = require(&#039;../user&#039;);
+const posts = require(&#039;../posts&#039;);
+const topics = require(&#039;../topics&#039;);
+const categories = require(&#039;../categories&#039;);
+const notifications = require(&#039;../notifications&#039;);
+const messaging = require(&#039;../messaging&#039;);
+const flags = require(&#039;../flags&#039;);
+const api = require(&#039;../api&#039;);
+const activitypub = require(&#039;.&#039;);
+
+const socketHelpers = require(&#039;../socket.io/helpers&#039;);
+const helpers = require(&#039;./helpers&#039;);
+
+const inbox = module.exports;
+
+function reject(type, object, target, senderType = &#039;uid&#039;, id = 0) {
+	activitypub.send(senderType, id, target, {
+		id: `${helpers.resolveActor(senderType, id)}#/activity/reject/${encodeURIComponent(object.id)}`,
+		type: &#039;Reject&#039;,
+		object: {
+			type,
+			target,
+			object,
+		},
+	}).catch(err =&gt; winston.error(err.stack));
+}
+
+inbox.create = async (req) =&gt; {
+	const { object, actor } = req.body;
+
+	// Alternative logic for non-public objects
+	const isPublic = [...(object.to || []), ...(object.cc || [])].includes(activitypub._constants.publicAddress);
+	if (!isPublic) {
+		return await activitypub.notes.assertPrivate(object);
+	}
+
+	// Category sync, remove when cross-posting available
+	const { cids } = await activitypub.actors.getLocalFollowers(actor);
+	let cid = null;
+	if (cids.size &gt; 0) {
+		cid = Array.from(cids)[0];
+	}
+
+	const asserted = await activitypub.notes.assert(0, object, { cid });
+	if (asserted) {
+		await activitypub.feps.announce(object.id, req.body);
+		// api.activitypub.add(req, { pid: object.id });
+	}
+};
+
+inbox.add = async (req) =&gt; {
+	const { actor, object, target } = req.body;
+
+	// Only react on Adds pertaining to local posts
+	const { type, id: pid } = await activitypub.helpers.resolveLocalId(object);
+	if (type === &#039;post&#039;) {
+		// Check context of OP
+		const tid = await posts.getPostField(pid, &#039;tid&#039;);
+		const context = await topics.getTopicField(tid, &#039;context&#039;);
+		if (context) {
+			const { attributedTo } = await activitypub.get(&#039;uid&#039;, 0, context);
+			if (context === target &amp;&amp; attributedTo === actor) {
+				activitypub.helpers.log(`[activitypub/inbox/add] Associating pid ${pid} with new context ${target}`);
+				await posts.setPostField(pid, &#039;context&#039;, target);
+			}
+		}
+	}
+};
+
+inbox.update = async (req) =&gt; {
+	const { actor, object } = req.body;
+	const isPublic = [...(object.to || []), ...(object.cc || [])].includes(activitypub._constants.publicAddress);
+
+	// Origin checking
+	const actorHostname = new URL(actor).hostname;
+	const objectHostname = new URL(object.id).hostname;
+	if (actorHostname !== objectHostname) {
+		throw new Error(&#039;[[error:activitypub.origin-mismatch]]&#039;);
+	}
+
+	switch (true) {
+		case activitypub._constants.acceptedPostTypes.includes(object.type): {
+			const [isNote, isMessage] = await Promise.all([
+				posts.exists(object.id),
+				messaging.messageExists(object.id),
+			]);
+
+			try {
+				switch (true) {
+					case isNote: {
+						const cid = await posts.getCidByPid(object.id);
+						const allowed = await privileges.categories.can(&#039;posts:edit&#039;, cid, activitypub._constants.uid);
+						if (!allowed) {
+							throw new Error(&#039;[[error:no-privileges]]&#039;);
+						}
+
+						const postData = await activitypub.mocks.post(object);
+						postData.tags = await activitypub.notes._normalizeTags(postData._activitypub.tag, postData.cid);
+						await posts.edit(postData);
+						const isDeleted = await posts.getPostField(object.id, &#039;deleted&#039;);
+						if (isDeleted) {
+							await api.posts.restore({ uid: actor }, { pid: object.id });
+						}
+						break;
+					}
+
+					case isMessage: {
+						const { roomId, deleted } = await messaging.getMessageFields(object.id, [&#039;roomId&#039;, &#039;deleted&#039;]);
+						await messaging.editMessage(actor, object.id, roomId, object.content);
+						if (deleted) {
+							await api.chats.restoreMessage({ uid: actor }, { mid: object.id });
+						}
+						break;
+					}
+
+					default: {
+						if (!isPublic) {
+							return await activitypub.notes.assertPrivate(object);
+						}
+
+						const { cids } = await activitypub.actors.getLocalFollowers(actor);
+						let cid = null;
+						if (cids.size &gt; 0) {
+							cid = Array.from(cids)[0];
+						}
+
+						const asserted = await activitypub.notes.assert(0, object.id, { cid });
+						if (asserted) {
+							activitypub.feps.announce(object.id, req.body);
+						}
+						break;
+					}
+				}
+			} catch (e) {
+				reject(&#039;Update&#039;, object, actor);
+			}
+			break;
+		}
+
+		case activitypub._constants.acceptableActorTypes.has(object.type): {
+			await activitypub.actors.assert(object.id, { update: true });
+			break;
+		}
+
+		case object.type === &#039;Tombstone&#039;: {
+			const [isNote, isMessage/* , isActor */] = await Promise.all([
+				posts.exists(object.id),
+				messaging.messageExists(object.id),
+				// db.isSortedSetMember(&#039;usersRemote:lastCrawled&#039;, object.id),
+			]);
+
+			switch (true) {
+				case isNote: {
+					await api.posts.delete({ uid: actor }, { pid: object.id });
+					break;
+				}
+
+				case isMessage: {
+					await api.chats.deleteMessage({ uid: actor }, { mid: object.id });
+					break;
+				}
+
+				// case isActor: {
+				// console.log(&#039;actor&#039;);
+				// break;
+				// }
+			}
+		}
+	}
+};
+
+inbox.delete = async (req) =&gt; {
+	const { actor, object } = req.body;
+	if (typeof object !== &#039;string&#039;) {
+		const { id } = object;
+		if (!id) {
+			throw new Error(&#039;[[error:invalid-pid]]&#039;);
+		}
+	}
+	const pid = object.id || object;
+	let type = object.type || undefined;
+
+	// Deletes don&#039;t have their objects resolved automatically
+	let method = &#039;purge&#039;;
+	try {
+		if (!type) {
+			({ type } = await activitypub.get(&#039;uid&#039;, 0, pid));
+		}
+
+		if (type === &#039;Tombstone&#039;) {
+			method = &#039;delete&#039;;
+		}
+	} catch (e) {
+		// probably 410/404
+	}
+
+	// Deletions must be made by an actor of the same origin
+	const actorHostname = new URL(actor).hostname;
+
+	const objectHostname = new URL(pid).hostname;
+	if (actorHostname !== objectHostname) {
+		return reject(&#039;Delete&#039;, object, actor);
+	}
+
+	const [isNote/* , isActor */] = await Promise.all([
+		posts.exists(pid),
+		// db.isSortedSetMember(&#039;usersRemote:lastCrawled&#039;, object.id),
+	]);
+
+	switch (true) {
+		case isNote: {
+			const cid = await posts.getCidByPid(pid);
+			const allowed = await privileges.categories.can(&#039;posts:edit&#039;, cid, activitypub._constants.uid);
+			if (!allowed) {
+				return reject(&#039;Delete&#039;, object, actor);
+			}
+
+			const uid = await posts.getPostField(pid, &#039;uid&#039;);
+			await activitypub.feps.announce(pid, req.body);
+			await api.posts[method]({ uid }, { pid });
+			break;
+		}
+
+		// case isActor: {
+		// console.log(&#039;actor&#039;);
+		// break;
+		// }
+
+		default: {
+			activitypub.helpers.log(`[activitypub/inbox.delete] Object (${pid}) does not exist locally. Doing nothing.`);
+			break;
+		}
+	}
+};
+
+inbox.like = async (req) =&gt; {
+	const { actor, object } = req.body;
+	const { type, id } = await activitypub.helpers.resolveLocalId(object.id);
+
+	if (type !== &#039;post&#039; || !(await posts.exists(id))) {
+		return reject(&#039;Like&#039;, object, actor);
+	}
+
+	const allowed = await privileges.posts.can(&#039;posts:upvote&#039;, id, activitypub._constants.uid);
+	if (!allowed) {
+		activitypub.helpers.log(`[activitypub/inbox.like] ${id} not allowed to be upvoted.`);
+		return reject(&#039;Like&#039;, object, actor);
+	}
+
+	activitypub.helpers.log(`[activitypub/inbox/like] id ${id} via ${actor}`);
+
+	const result = await posts.upvote(id, actor);
+	await activitypub.feps.announce(object.id, req.body);
+	socketHelpers.upvote(result, &#039;notifications:upvoted-your-post-in&#039;);
+};
+
+inbox.announce = async (req) =&gt; {
+	let { actor, object, published, to, cc } = req.body;
+	activitypub.helpers.log(`[activitypub/inbox/announce] Parsing Announce(${object.type}) from ${actor}`);
+	let timestamp = new Date(published);
+	timestamp = timestamp.toString() !== &#039;Invalid Date&#039; ? timestamp.getTime() : Date.now();
+
+	const assertion = await activitypub.actors.assert(actor);
+	if (!assertion) {
+		throw new Error(&#039;[[error:activitypub.invalid-id]]&#039;);
+	}
+
+	let tid;
+	let pid;
+
+	// Category sync, remove when cross-posting available
+	const { cids } = await activitypub.actors.getLocalFollowers(actor);
+	let cid = null;
+	if (cids.size &gt; 0) {
+		cid = Array.from(cids)[0];
+	}
+
+	// 1b12 announce
+	const categoryActor = await categories.exists(actor);
+	if (categoryActor) {
+		cid = actor;
+	}
+
+	switch(true) {
+		case object.type === &#039;Like&#039;: {
+			const id = object.object.id || object.object;
+			const { id: localId } = await activitypub.helpers.resolveLocalId(id);
+			const exists = await posts.exists(localId || id);
+			if (exists) {
+				try {
+					const result = await posts.upvote(localId || id, object.actor);
+					if (localId) {
+						socketHelpers.upvote(result, &#039;notifications:upvoted-your-post-in&#039;);
+					}
+				} catch (e) {
+					// vote denied due to local limitations (frequency, privilege, etc.); noop.
+				}
+			}
+
+			break;
+		}
+
+		case object.type === &#039;Update&#039;: {
+			req.body = object;
+			await inbox.update(req);
+			break;
+		}
+
+		case object.type === &#039;Create&#039;: {
+			object = object.object;
+			// falls through
+		}
+
+		// Announce(Object)
+		case activitypub._constants.acceptedPostTypes.includes(object.type): {
+			if (String(object.id).startsWith(nconf.get(&#039;url&#039;))) { // Local object
+				const { type, id } = await activitypub.helpers.resolveLocalId(object.id);
+				if (type !== &#039;post&#039; || !(await posts.exists(id))) {
+					reject(&#039;Announce&#039;, object, actor);
+					return;
+				}
+
+				pid = id;
+				tid = await posts.getPostField(id, &#039;tid&#039;);
+
+				socketHelpers.sendNotificationToPostOwner(pid, actor, &#039;announce&#039;, &#039;notifications:activitypub.announce&#039;);
+			} else { // Remote object
+				// Follower check
+				if (!cid) {
+					const { followers } = await activitypub.actors.getLocalFollowCounts(actor);
+					if (!followers) {
+						winston.verbose(`[activitypub/inbox.announce] Rejecting ${object.id} via ${actor} due to no followers`);
+						reject(&#039;Announce&#039;, object, actor);
+						return;
+					}
+				}
+
+				pid = object.id;
+				pid = await activitypub.resolveId(0, pid); // in case wrong id is passed-in; unlikely, but still.
+				if (!pid) {
+					return;
+				}
+
+				const assertion = await activitypub.notes.assert(0, pid, { cid, skipChecks: true });
+				if (!assertion) {
+					return;
+				}
+
+				({ tid } = assertion);
+				await activitypub.notes.updateLocalRecipients(pid, { to, cc });
+				await activitypub.notes.syncUserInboxes(tid);
+			}
+
+			if (!cid) { // Topic events from actors followed by users only
+				await activitypub.notes.announce.add(pid, actor, timestamp);
+			}
+		}
+	}
+};
+
+inbox.follow = async (req) =&gt; {
+	const { actor, object, id: followId } = req.body;
+	// Sanity checks
+	const { type, id } = await helpers.resolveLocalId(object.id);
+	if (![&#039;category&#039;, &#039;user&#039;].includes(type)) {
+		throw new Error(&#039;[[error:activitypub.invalid-id]]&#039;);
+	}
+
+	const assertion = await activitypub.actors.assert(actor);
+	if (!assertion) {
+		throw new Error(&#039;[[error:activitypub.invalid-id]]&#039;);
+	}
+	const handle = await user.getUserField(actor, &#039;username&#039;);
+
+	if (type === &#039;user&#039;) {
+		const [exists, allowed] = await Promise.all([
+			user.exists(id),
+			privileges.global.can(&#039;view:users&#039;, activitypub._constants.uid),
+		]);
+		if (!exists || !allowed) {
+			throw new Error(&#039;[[error:invalid-uid]]&#039;);
+		}
+
+		const isFollowed = await inbox.isFollowed(actor, id);
+		if (isFollowed) {
+			// No additional parsing required
+			return;
+		}
+
+		const now = Date.now();
+		await db.sortedSetAdd(`followersRemote:${id}`, now, actor);
+		await db.sortedSetAdd(`followingRemote:${actor}`, now, id); // for following backreference (actor pruning)
+
+		const followerRemoteCount = await db.sortedSetCard(`followersRemote:${id}`);
+		await user.setUserField(id, &#039;followerRemoteCount&#039;, followerRemoteCount);
+
+		await user.onFollow(actor, id);
+		activitypub.send(&#039;uid&#039;, id, actor, {
+			id: `${nconf.get(&#039;url&#039;)}/${type}/${id}#activity/accept:follow/${handle}/${Date.now()}`,
+			type: &#039;Accept&#039;,
+			object: {
+				id: followId,
+				type: &#039;Follow&#039;,
+				actor,
+				object: object.id,
+			},
+		}).catch(err =&gt; winston.error(err.stack));
+	} else if (type === &#039;category&#039;) {
+		const [exists, allowed] = await Promise.all([
+			categories.exists(id),
+			privileges.categories.can(&#039;read&#039;, id, activitypub._constants.uid),
+		]);
+		if (!exists) {
+			throw new Error(&#039;[[error:invalid-cid]]&#039;);
+		}
+		if (!allowed) {
+			return reject(&#039;Follow&#039;, object, actor);
+		}
+
+		const watchState = await categories.getWatchState([id], actor);
+		if (watchState[0] !== categories.watchStates.tracking) {
+			await user.setCategoryWatchState(actor, id, categories.watchStates.tracking);
+		}
+
+		activitypub.send(&#039;cid&#039;, id, actor, {
+			id: `${nconf.get(&#039;url&#039;)}/${type}/${id}#activity/accept:follow/${handle}/${Date.now()}`,
+			type: &#039;Accept&#039;,
+			object: {
+				id: followId,
+				type: &#039;Follow&#039;,
+				actor,
+				object: object.id,
+			},
+		}).catch(err =&gt; winston.error(err.stack));
+	}
+};
+
+inbox.isFollowed = async (actorId, uid) =&gt; {
+	if (actorId.indexOf(&#039;@&#039;) === -1 || parseInt(uid, 10) &lt;= 0) {
+		return false;
+	}
+	return await db.isSortedSetMember(`followersRemote:${uid}`, actorId);
+};
+
+inbox.accept = async (req) =&gt; {
+	const { actor, object } = req.body;
+	const { type } = object;
+
+	const { type: localType, id } = await helpers.resolveLocalId(object.actor);
+	if (![&#039;user&#039;, &#039;category&#039;].includes(localType)) {
+		throw new Error(&#039;[[error:invalid-data]]&#039;);
+	}
+
+	const assertion = await activitypub.actors.assert(actor);
+	if (!assertion) {
+		throw new Error(&#039;[[error:activitypub.invalid-id]]&#039;);
+	}
+
+	if (type === &#039;Follow&#039;) {
+		if (localType === &#039;user&#039;) {
+			if (!await db.isSortedSetMember(`followRequests:uid.${id}`, actor)) {
+				if (await db.isSortedSetMember(`followingRemote:${id}`, actor)) return; // already following
+				return reject(&#039;Accept&#039;, req.body, actor); // not following, not requested, so reject to hopefully stop retries
+			}
+			const timestamp = await db.sortedSetScore(`followRequests:uid.${id}`, actor);
+			await Promise.all([
+				db.sortedSetRemove(`followRequests:uid.${id}`, actor),
+				db.sortedSetAdd(`followingRemote:${id}`, timestamp, actor),
+				db.sortedSetAdd(`followersRemote:${actor}`, timestamp, id), // for followers backreference and notes assertion checking
+			]);
+			const followingRemoteCount = await db.sortedSetCard(`followingRemote:${id}`);
+			await user.setUserField(id, &#039;followingRemoteCount&#039;, followingRemoteCount);
+		} else if (localType === &#039;category&#039;) {
+			if (!await db.isSortedSetMember(`followRequests:cid.${id}`, actor)) {
+				if (await db.isSortedSetMember(`cid:${id}:following`, actor)) return; // already following
+				return reject(&#039;Accept&#039;, req.body, actor); // not following, not requested, so reject to hopefully stop retries
+			}
+			const timestamp = await db.sortedSetScore(`followRequests:cid.${id}`, actor);
+			await Promise.all([
+				db.sortedSetRemove(`followRequests:cid.${id}`, actor),
+				db.sortedSetAdd(`cid:${id}:following`, timestamp, actor),
+				db.sortedSetAdd(`followersRemote:${actor}`, timestamp, `cid|${id}`), // for notes assertion checking
+			]);
+		}
+	}
+};
+
+inbox.undo = async (req) =&gt; {
+	// todo: &quot;actor&quot; in this case should be the one in object, no?
+	const { actor, object } = req.body;
+	const { type } = object;
+
+	if (actor !== object.actor) {
+		throw new Error(&#039;[[error:activitypub.actor-mismatch]]&#039;);
+	}
+
+	const assertion = await activitypub.actors.assert(actor);
+	if (!assertion) {
+		throw new Error(&#039;[[error:activitypub.invalid-id]]&#039;);
+	}
+
+	let { type: localType, id } = await helpers.resolveLocalId(object.object);
+
+	winston.verbose(`[activitypub/inbox/undo] ${type} ${localType &amp;&amp; id ? `${localType} ${id}` : object.object} via ${actor}`);
+
+	switch (type) {
+		case &#039;Follow&#039;: {
+			switch (localType) {
+				case &#039;user&#039;: {
+					const exists = await user.exists(id);
+					if (!exists) {
+						throw new Error(&#039;[[error:invalid-uid]]&#039;);
+					}
+
+					await Promise.all([
+						db.sortedSetRemove(`followersRemote:${id}`, actor),
+						db.sortedSetRemove(`followingRemote:${actor}`, id),
+					]);
+					const followerRemoteCount = await db.sortedSetCard(`followerRemote:${id}`);
+					await user.setUserField(id, &#039;followerRemoteCount&#039;, followerRemoteCount);
+					notifications.rescind(`follow:${id}:uid:${actor}`);
+					break;
+				}
+
+				case &#039;category&#039;: {
+					const exists = await categories.exists(id);
+					if (!exists) {
+						throw new Error(&#039;[[error:invalid-cid]]&#039;);
+					}
+
+					await user.setCategoryWatchState(actor, id, categories.watchStates.notwatching);
+					break;
+				}
+			}
+
+			break;
+		}
+
+		case &#039;Like&#039;: {
+			const exists = await posts.exists(id);
+			if (localType !== &#039;post&#039; || !exists) {
+				reject(&#039;Like&#039;, object, actor);
+				break;
+			}
+
+			const allowed = await privileges.posts.can(&#039;posts:upvote&#039;, id, activitypub._constants.uid);
+			if (!allowed) {
+				winston.verbose(`[activitypub/inbox.like] ${id} not allowed to be upvoted.`);
+				reject(&#039;Like&#039;, object, actor);
+				break;
+			}
+
+			await posts.unvote(id, actor);
+			activitypub.feps.announce(object.object, req.body);
+			notifications.rescind(`upvote:post:${id}:uid:${actor}`);
+			break;
+		}
+
+		case &#039;Announce&#039;: {
+			id = id || object.object; // remote announces
+			const exists = await posts.exists(id);
+			if (!exists) {
+				activitypub.helpers.log(`[activitypub/inbox/undo] Attempted to undo announce of ${id} but couldn&#039;t find it, so doing nothing.`);
+				break;
+			}
+
+			await activitypub.notes.announce.remove(id, actor);
+			notifications.rescind(`announce:post:${id}:uid:${actor}`);
+			break;
+		}
+		case &#039;Flag&#039;: {
+			if (!Array.isArray(object.object)) {
+				object.object = [object.object];
+			}
+			await Promise.all(object.object.map(async (subject) =&gt; {
+				const { type, id } = await activitypub.helpers.resolveLocalId(subject.id);
+				try {
+					await flags.rescindReport(type, id, actor);
+				} catch (e) {
+					reject(&#039;Undo&#039;, { type: &#039;Flag&#039;, object: [subject] }, actor);
+				}
+			}));
+			break;
+		}
+	}
+};
+inbox.flag = async (req) =&gt; {
+	const { actor, object, content } = req.body;
+	const objects = Array.isArray(object) ? object : [object];
+
+	// Check if the actor is valid
+	if (!await activitypub.actors.assert(actor)) {
+		return reject(&#039;Flag&#039;, objects, actor);
+	}
+
+	await Promise.all(objects.map(async (subject, index) =&gt; {
+		const { type, id } = await activitypub.helpers.resolveObjects(subject.id);
+		try {
+			await flags.create(activitypub.helpers.mapToLocalType(type), id, actor, content);
+		} catch (e) {
+			reject(&#039;Flag&#039;, objects[index], actor);
+		}
+	}));
+};
+
+inbox.reject = async (req) =&gt; {
+	const { actor, object } = req.body;
+	const { type, id } = object;
+	const { hostname } = new URL(actor);
+	const queueId = `${type}:${id}:${hostname}`;
+
+	// stop retrying rejected requests
+	clearTimeout(activitypub.retryQueue.get(queueId));
+	activitypub.retryQueue.delete(queueId);
+};</textarea>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="container">
+    <p>.</p>
+  </div>
+</footer>
+
+<script type="text/html" id="complexity-popover-template">
+  <div class="complexity-notice">
+    Complexity : {{ cyclomatic }} <br>
+    Length : {{ halstead.length }} <br>
+    Difficulty : {{ halstead.difficulty.toFixed(2) }} <br>
+    Est # bugs : {{ halstead.bugs.toFixed(2) }}<br>
+  </div>
+</script>
+
+<script type="text/javascript" src="../../assets/scripts/bundles/core-bundle.js"></script>
+<script type="text/javascript" src="../../assets/scripts/bundles/codemirror.js"></script>
+<script type="text/javascript" src="../../assets/scripts/codemirror.markpopovertext.js"></script>
+<script type="text/javascript" src="report.js"></script>
+<script type="text/javascript" src="report.history.js"></script>
+<script type="text/javascript" src="../../assets/scripts/plato-file.js"></script>
+</body>
+</html>

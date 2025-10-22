@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Plato - api/activitypub.js</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="">
+  <meta name="author" content="">
+
+  <!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+
+  <link href="../../assets/css/vendor/morris.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/bootstrap.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/font-awesome.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/codemirror.css" rel="stylesheet">
+  <link href="../../assets/css/plato.css" rel="stylesheet">
+  <link href="../../assets/css/plato-file.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="navbar navbar-fixed-top">
+  <div class="container">
+    <a class="navbar-brand" href="http://github.com/es-analysis/plato">Plato on Github</a>
+    <ul class="nav navbar-nav">
+      <li>
+        <a href="../../index.html">Report Home</a>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<div class="jumbotron">
+  <div class="container">
+    <h1>api/activitypub.js</h1>
+  </div>
+</div>
+
+<div class="container aggregate-stats">
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Maintainability <a href="http://blogs.msdn.com/b/codeanalysis/archive/2007/11/20/maintainability-index-range-and-meaning.aspx"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="A value between 0 and 100 that represents the relative ease of maintaining the code. A high value means better maintainability." data-original-title="Maintainability Index"  data-container="body"></i></a></h2>
+      <p class="stat">58.32</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Lines of code <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h2>
+      <p class="stat">475</p>
+    </div>
+  </div>
+  <div class="row historical">
+    <div class="col-md-6">
+      <p id="chart_historical_maint" class="chart"></p>
+    </div>
+    <div class="col-md-6">
+      <p id="chart_historical_sloc" class="chart"></p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Difficulty  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="The difficulty measure is related to the difficulty of the program to write or understand." data-original-title="Difficulty" data-container="body"></i></a></h2>
+      <p class="stat">78.76</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Estimated Errors  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Halstead's delivered bugs is an estimate for the number of errors in the implementation." data-original-title="Delivered Bugs" data-container="body"></i></a></h2>
+      <p class="stat">5.93</p>
+    </div>
+  </div>
+</div>
+
+<div class="container charts">
+  <div class="row">
+    <h2 class="header">Function weight</h2>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h3 class="chart-header">By Complexity <a href="http://en.wikipedia.org/wiki/Cyclomatic_complexity"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="This metric counts the number of distinct paths through a block of code. Lower values are better." data-original-title="Cyclomatic Complexity" data-container="body"></i></a></h3>
+      <div id="fn-by-complexity" class="stat"></div>
+    </div>
+    <div class="col-md-6">
+      <h3 class="chart-header">By SLOC  <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h3>
+      <div id="fn-by-sloc" class="stat"></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="row">
+    <textarea id="file-source" class="col-md-12">&#039;use strict&#039;;
+
+/**
+ * DEVELOPMENT NOTE
+ *
+ * THIS FILE IS UNDER ACTIVE DEVELOPMENT AND IS EXPLICITLY EXCLUDED FROM IMMUTABILITY GUARANTEES
+ *
+ * If you use api methods in this file, be prepared that they may be removed or modified with no warning.
+ */
+
+const nconf = require(&#039;nconf&#039;);
+const winston = require(&#039;winston&#039;);
+
+const db = require(&#039;../database&#039;);
+const user = require(&#039;../user&#039;);
+const categories = require(&#039;../categories&#039;);
+const meta = require(&#039;../meta&#039;);
+const privileges = require(&#039;../privileges&#039;);
+const activitypub = require(&#039;../activitypub&#039;);
+const posts = require(&#039;../posts&#039;);
+const topics = require(&#039;../topics&#039;);
+const messaging = require(&#039;../messaging&#039;);
+const utils = require(&#039;../utils&#039;);
+
+const activitypubApi = module.exports;
+
+function enabledCheck(next) {
+	return async function (caller, params) {
+		if (meta.config.activitypubEnabled) {
+			try {
+				await next(caller, params);
+			} catch (e) {
+				winston.error(`[activitypub/api] Error\n${e.stack}`);
+			}
+		}
+	};
+}
+
+activitypubApi.follow = enabledCheck(async (caller, { type, id, actor } = {}) =&gt; {
+	// Privilege checks should be done upstream
+	const acceptedTypes = [&#039;uid&#039;, &#039;cid&#039;];
+	const assertion = await activitypub.actors.assert(actor);
+	if (!acceptedTypes.includes(type) || !assertion || (Array.isArray(assertion) &amp;&amp; assertion.length)) {
+		throw new Error(&#039;[[error:activitypub.invalid-id]]&#039;);
+	}
+
+	if (actor.includes(&#039;@&#039;)) {
+		const [uid, cid] = await Promise.all([
+			user.getUidByUserslug(actor),
+			categories.getCidByHandle(actor),
+		]);
+
+		actor = uid || cid;
+	}
+
+	const isFollowing = await db.isSortedSetMember(type === &#039;uid&#039; ? `followingRemote:${id}` : `cid:${id}:following`, actor);
+	if (isFollowing) { // already following
+		return;
+	}
+
+	const timestamp = Date.now();
+
+	await db.sortedSetAdd(`followRequests:${type}.${id}`, timestamp, actor);
+	try {
+		await activitypub.send(type, id, [actor], {
+			id: `${nconf.get(&#039;url&#039;)}/${type}/${id}#activity/follow/${encodeURIComponent(actor)}/${timestamp}`,
+			type: &#039;Follow&#039;,
+			object: actor,
+		});
+	} catch (e) {
+		await db.sortedSetRemove(`followRequests:${type}.${id}`, actor);
+		throw e;
+	}
+});
+
+// should be .undo.follow
+activitypubApi.unfollow = enabledCheck(async (caller, { type, id, actor }) =&gt; {
+	const acceptedTypes = [&#039;uid&#039;, &#039;cid&#039;];
+	const assertion = await activitypub.actors.assert(actor);
+	if (!acceptedTypes.includes(type) || !assertion) {
+		throw new Error(&#039;[[error:activitypub.invalid-id]]&#039;);
+	}
+
+	if (actor.includes(&#039;@&#039;)) {
+		const [uid, cid] = await Promise.all([
+			user.getUidByUserslug(actor),
+			categories.getCidByHandle(actor),
+		]);
+
+		actor = uid || cid;
+	}
+
+	const [isFollowing, isPending] = await Promise.all([
+		db.isSortedSetMember(type === &#039;uid&#039; ? `followingRemote:${id}` : `cid:${id}:following`, actor),
+		db.isSortedSetMember(`followRequests:${type === &#039;uid&#039; ? &#039;uid&#039; : &#039;cid&#039;}.${id}`, actor),
+	]);
+
+	if (!isFollowing &amp;&amp; !isPending) { // already not following/pending
+		return;
+	}
+
+	const timestamps = await db.sortedSetsScore([
+		`followRequests:${type}.${id}`,
+		type === &#039;uid&#039; ? `followingRemote:${id}` : `cid:${id}:following`,
+	], actor);
+	const timestamp = timestamps[0] || timestamps[1];
+
+	const object = {
+		id: `${nconf.get(&#039;url&#039;)}/${type}/${id}#activity/follow/${encodeURIComponent(actor)}/${timestamp}`,
+		type: &#039;Follow&#039;,
+		object: actor,
+	};
+	if (type === &#039;uid&#039;) {
+		object.actor = `${nconf.get(&#039;url&#039;)}/uid/${id}`;
+	} else if (type === &#039;cid&#039;) {
+		object.actor = `${nconf.get(&#039;url&#039;)}/category/${id}`;
+	}
+
+	await activitypub.send(type, id, [actor], {
+		id: `${nconf.get(&#039;url&#039;)}/${type}/${id}#activity/undo:follow/${encodeURIComponent(actor)}/${timestamp}`,
+		type: &#039;Undo&#039;,
+		actor: object.actor,
+		object,
+	});
+
+	if (type === &#039;uid&#039;) {
+		await Promise.all([
+			db.sortedSetRemove(`followingRemote:${id}`, actor),
+			db.sortedSetRemove(`followRequests:uid.${id}`, actor),
+			db.sortedSetRemove(`followersRemote:${actor}`, id),
+			db.decrObjectField(`user:${id}`, &#039;followingRemoteCount&#039;),
+		]);
+	} else if (type === &#039;cid&#039;) {
+		await Promise.all([
+			db.sortedSetRemove(`cid:${id}:following`, actor),
+			db.sortedSetRemove(`followRequests:cid.${id}`, actor),
+			db.sortedSetRemove(`followersRemote:${actor}`, `cid|${id}`),
+		]);
+	}
+});
+
+activitypubApi.create = {};
+
+activitypubApi.create.note = enabledCheck(async (caller, { pid, post }) =&gt; {
+	if (!post) {
+		post = (await posts.getPostSummaryByPids([pid], caller.uid, { stripTags: false })).pop();
+		if (!post) {
+			return;
+		}
+	} else {
+		pid = post.pid;
+	}
+
+	const allowed = await privileges.posts.can(&#039;topics:read&#039;, pid, activitypub._constants.uid);
+	if (!allowed) {
+		activitypub.helpers.log(`[activitypub/api] Not federating creation of pid ${pid} to the fediverse due to privileges.`);
+		return;
+	}
+
+	const { activity, targets } = await activitypub.mocks.activities.create(pid, caller.uid, post);
+
+	await Promise.all([
+		activitypub.send(&#039;uid&#039;, caller.uid, Array.from(targets), activity),
+		activitypub.feps.announce(pid, activity),
+		// utils.isNumber(post.cid) ? activitypubApi.add(caller, { pid }) : undefined,
+	]);
+});
+
+activitypubApi.create.privateNote = enabledCheck(async (caller, { messageObj }) =&gt; {
+	const { roomId } = messageObj;
+	let targets = await messaging.getUidsInRoom(roomId, 0, -1);
+	targets = targets.filter(uid =&gt; !utils.isNumber(uid)); // remote uids only
+
+	const object = await activitypub.mocks.notes.private({ messageObj });
+
+	const payload = {
+		id: `${object.id}#activity/create/${Date.now()}`,
+		type: &#039;Create&#039;,
+		actor: object.attributedTo,
+		to: object.to,
+		object,
+	};
+
+	await activitypub.send(&#039;uid&#039;, messageObj.fromuid, targets, payload);
+});
+
+activitypubApi.update = {};
+
+activitypubApi.update.profile = enabledCheck(async (caller, { uid }) =&gt; {
+	const [object, targets] = await Promise.all([
+		activitypub.mocks.actors.user(uid),
+		db.getSortedSetMembers(`followersRemote:${caller.uid}`),
+	]);
+
+	await activitypub.send(&#039;uid&#039;, caller.uid, targets, {
+		id: `${object.id}#activity/update/${Date.now()}`,
+		type: &#039;Update&#039;,
+		actor: object.id,
+		to: [activitypub._constants.publicAddress],
+		cc: [],
+		object,
+	});
+});
+
+activitypubApi.update.category = enabledCheck(async (caller, { cid }) =&gt; {
+	const [object, targets] = await Promise.all([
+		activitypub.mocks.actors.category(cid),
+		activitypub.notes.getCategoryFollowers(cid),
+	]);
+
+	await activitypub.send(&#039;cid&#039;, cid, targets, {
+		id: `${object.id}#activity/update/${Date.now()}`,
+		type: &#039;Update&#039;,
+		actor: object.id,
+		to: [activitypub._constants.publicAddress],
+		cc: [],
+		object,
+	});
+});
+
+activitypubApi.update.note = enabledCheck(async (caller, { post }) =&gt; {
+	// Only applies to local posts
+	if (!utils.isNumber(post.pid)) {
+		return;
+	}
+
+	const object = await activitypub.mocks.notes.public(post);
+	const { to, cc, targets } = await activitypub.buildRecipients(object, { pid: post.pid, uid: post.user.uid });
+	object.to = to;
+	object.cc = cc;
+
+	const allowed = await privileges.posts.can(&#039;topics:read&#039;, post.pid, activitypub._constants.uid);
+	if (!allowed) {
+		activitypub.helpers.log(`[activitypub/api] Not federating update of pid ${post.pid} to the fediverse due to privileges.`);
+		return;
+	}
+
+	const payload = {
+		id: `${object.id}#activity/update/${post.edited || Date.now()}`,
+		type: &#039;Update&#039;,
+		actor: object.attributedTo,
+		to,
+		cc,
+		object,
+	};
+
+	await Promise.all([
+		activitypub.send(&#039;uid&#039;, caller.uid, Array.from(targets), payload),
+		activitypub.feps.announce(post.pid, payload),
+	]);
+});
+
+activitypubApi.update.privateNote = enabledCheck(async (caller, { messageObj }) =&gt; {
+	if (!utils.isNumber(messageObj.mid)) {
+		return;
+	}
+
+	const { roomId } = messageObj;
+	let uids = await messaging.getUidsInRoom(roomId, 0, -1);
+	uids = uids.filter(uid =&gt; String(uid) !== String(messageObj.fromuid)); // no author
+	const to = uids.map(uid =&gt; (utils.isNumber(uid) ? `${nconf.get(&#039;url&#039;)}/uid/${uid}` : uid));
+	const targets = uids.filter(uid =&gt; !utils.isNumber(uid)); // remote uids only
+
+	const object = await activitypub.mocks.notes.private({ messageObj });
+
+	const payload = {
+		id: `${object.id}#activity/create/${Date.now()}`,
+		type: &#039;Update&#039;,
+		actor: object.attributedTo,
+		to,
+		object,
+	};
+
+	await activitypub.send(&#039;uid&#039;, caller.uid, targets, payload);
+});
+
+activitypubApi.delete = {};
+
+activitypubApi.delete.note = enabledCheck(async (caller, { pid }) =&gt; {
+	// Only applies to local posts
+	if (!utils.isNumber(pid)) {
+		return;
+	}
+
+	const id = `${nconf.get(&#039;url&#039;)}/post/${pid}`;
+	const post = (await posts.getPostSummaryByPids([pid], caller.uid, { stripTags: false })).pop();
+	const object = await activitypub.mocks.notes.public(post);
+	const { to, cc, targets } = await activitypub.buildRecipients(object, { pid, uid: post.user.uid });
+
+	const allowed = await privileges.posts.can(&#039;topics:read&#039;, pid, activitypub._constants.uid);
+	if (!allowed) {
+		activitypub.helpers.log(`[activitypub/api] Not federating update of pid ${pid} to the fediverse due to privileges.`);
+		return;
+	}
+
+	const payload = {
+		id: `${id}#activity/delete/${Date.now()}`,
+		type: &#039;Delete&#039;,
+		actor: object.attributedTo,
+		to,
+		cc,
+		object: id,
+		origin: object.context,
+	};
+
+	await Promise.all([
+		activitypub.send(&#039;uid&#039;, caller.uid, Array.from(targets), payload),
+		activitypub.feps.announce(pid, payload),
+	]);
+});
+
+activitypubApi.like = {};
+
+activitypubApi.like.note = enabledCheck(async (caller, { pid }) =&gt; {
+	const payload = {
+		id: `${nconf.get(&#039;url&#039;)}/uid/${caller.uid}#activity/like/${encodeURIComponent(pid)}`,
+		type: &#039;Like&#039;,
+		actor: `${nconf.get(&#039;url&#039;)}/uid/${caller.uid}`,
+		object: utils.isNumber(pid) ? `${nconf.get(&#039;url&#039;)}/post/${pid}` : pid,
+	};
+
+	if (!activitypub.helpers.isUri(pid)) { // only 1b12 announce for local likes
+		await activitypub.feps.announce(pid, payload);
+		return;
+	}
+
+	const uid = await posts.getPostField(pid, &#039;uid&#039;);
+	if (!activitypub.helpers.isUri(uid)) {
+		return;
+	}
+
+	await Promise.all([
+		activitypub.send(&#039;uid&#039;, caller.uid, [uid], payload),
+		activitypub.feps.announce(pid, payload),
+	]);
+});
+
+activitypubApi.announce = {};
+
+activitypubApi.announce.note = enabledCheck(async (caller, { tid }) =&gt; {
+	const { mainPid: pid, cid } = await topics.getTopicFields(tid, [&#039;mainPid&#039;, &#039;cid&#039;]);
+
+	// Only remote posts can be announced to real categories
+	if (utils.isNumber(pid) || parseInt(cid, 10) === -1) {
+		return;
+	}
+
+	const uid = await posts.getPostField(pid, &#039;uid&#039;); // author
+	const allowed = await privileges.posts.can(&#039;topics:read&#039;, pid, activitypub._constants.uid);
+	if (!allowed) {
+		activitypub.helpers.log(`[activitypub/api] Not federating announce of pid ${pid} to the fediverse due to privileges.`);
+		return;
+	}
+
+	const { to, cc, targets } = await activitypub.buildRecipients({
+		id: pid,
+		to: [activitypub._constants.publicAddress],
+		cc: [`${nconf.get(&#039;url&#039;)}/uid/${caller.uid}/followers`, uid],
+	}, { uid: caller.uid });
+
+	await activitypub.send(&#039;uid&#039;, caller.uid, Array.from(targets), {
+		id: `${nconf.get(&#039;url&#039;)}/post/${encodeURIComponent(pid)}#activity/announce/${Date.now()}`,
+		type: &#039;Announce&#039;,
+		actor: `${nconf.get(&#039;url&#039;)}/uid/${caller.uid}`,
+		to,
+		cc,
+		object: pid,
+		target: `${nconf.get(&#039;url&#039;)}/category/${cid}`,
+	});
+});
+
+activitypubApi.undo = {};
+
+// activitypubApi.undo.follow =
+
+activitypubApi.undo.like = enabledCheck(async (caller, { pid }) =&gt; {
+	if (!activitypub.helpers.isUri(pid)) {
+		return;
+	}
+
+	const uid = await posts.getPostField(pid, &#039;uid&#039;);
+	if (!activitypub.helpers.isUri(uid)) {
+		return;
+	}
+
+	const payload = {
+		id: `${nconf.get(&#039;url&#039;)}/uid/${caller.uid}#activity/undo:like/${encodeURIComponent(pid)}/${Date.now()}`,
+		type: &#039;Undo&#039;,
+		actor: `${nconf.get(&#039;url&#039;)}/uid/${caller.uid}`,
+		object: {
+			actor: `${nconf.get(&#039;url&#039;)}/uid/${caller.uid}`,
+			id: `${nconf.get(&#039;url&#039;)}/uid/${caller.uid}#activity/like/${encodeURIComponent(pid)}`,
+			type: &#039;Like&#039;,
+			object: pid,
+		},
+	};
+
+	await Promise.all([
+		activitypub.send(&#039;uid&#039;, caller.uid, [uid], payload),
+		activitypub.feps.announce(pid, payload),
+	]);
+});
+
+activitypubApi.flag = enabledCheck(async (caller, flag) =&gt; {
+	if (!activitypub.helpers.isUri(flag.targetId)) {
+		return;
+	}
+	const reportedIds = [flag.targetId];
+	if (flag.type === &#039;post&#039; &amp;&amp; activitypub.helpers.isUri(flag.targetUid)) {
+		reportedIds.push(flag.targetUid);
+	}
+	const reason = flag.reason ||
+		(flag.reports &amp;&amp; flag.reports.filter(report =&gt; report.reporter.uid === caller.uid).at(-1).value);
+	await activitypub.send(&#039;uid&#039;, caller.uid, reportedIds, {
+		id: `${nconf.get(&#039;url&#039;)}/${flag.type}/${encodeURIComponent(flag.targetId)}#activity/flag/${caller.uid}`,
+		type: &#039;Flag&#039;,
+		actor: `${nconf.get(&#039;url&#039;)}/uid/${caller.uid}`,
+		object: reportedIds,
+		content: reason,
+	});
+	await db.sortedSetAdd(`flag:${flag.flagId}:remote`, Date.now(), caller.uid);
+});
+
+/*
+activitypubApi.add = enabledCheck((async (_, { pid }) =&gt; {
+	let localId;
+	if (String(pid).startsWith(nconf.get(&#039;url&#039;))) {
+		({ id: localId } = await activitypub.helpers.resolveLocalId(pid));
+	}
+
+	const tid = await posts.getPostField(localId || pid, &#039;tid&#039;);
+	const cid = await posts.getCidByPid(localId || pid);
+	if (!utils.isNumber(tid) || cid &lt;= 0) { // `Add` only federated on categorized topics started locally
+		return;
+	}
+
+	let to = [activitypub._constants.publicAddress];
+	let cc = [];
+	let targets;
+	({ to, cc, targets } = await activitypub.buildRecipients({ to, cc }, { pid: localId || pid, cid }));
+
+	await activitypub.send(&#039;cid&#039;, cid, Array.from(targets), {
+		id: `${nconf.get(&#039;url&#039;)}/post/${encodeURIComponent(localId || pid)}#activity/add/${Date.now()}`,
+		type: &#039;Add&#039;,
+		to,
+		cc,
+		object: utils.isNumber(pid) ? `${nconf.get(&#039;url&#039;)}/post/${pid}` : pid,
+		target: `${nconf.get(&#039;url&#039;)}/topic/${tid}`,
+	});
+}));
+*/
+activitypubApi.undo.flag = enabledCheck(async (caller, flag) =&gt; {
+	if (!activitypub.helpers.isUri(flag.targetId)) {
+		return;
+	}
+	const reportedIds = [flag.targetId];
+	if (flag.type === &#039;post&#039; &amp;&amp; activitypub.helpers.isUri(flag.targetUid)) {
+		reportedIds.push(flag.targetUid);
+	}
+	const reason = flag.reason ||
+		(flag.reports &amp;&amp; flag.reports.filter(report =&gt; report.reporter.uid === caller.uid).at(-1).value);
+	await activitypub.send(&#039;uid&#039;, caller.uid, reportedIds, {
+		id: `${nconf.get(&#039;url&#039;)}/${flag.type}/${encodeURIComponent(flag.targetId)}#activity/undo:flag/${caller.uid}/${Date.now()}`,
+		type: &#039;Undo&#039;,
+		actor: `${nconf.get(&#039;url&#039;)}/uid/${caller.uid}`,
+		object: {
+			id: `${nconf.get(&#039;url&#039;)}/${flag.type}/${encodeURIComponent(flag.targetId)}#activity/flag/${caller.uid}`,
+			actor: `${nconf.get(&#039;url&#039;)}/uid/${caller.uid}`,
+			type: &#039;Flag&#039;,
+			object: reportedIds,
+			content: reason,
+		},
+	});
+	await db.sortedSetRemove(`flag:${flag.flagId}:remote`, caller.uid);
+});</textarea>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="container">
+    <p>.</p>
+  </div>
+</footer>
+
+<script type="text/html" id="complexity-popover-template">
+  <div class="complexity-notice">
+    Complexity : {{ cyclomatic }} <br>
+    Length : {{ halstead.length }} <br>
+    Difficulty : {{ halstead.difficulty.toFixed(2) }} <br>
+    Est # bugs : {{ halstead.bugs.toFixed(2) }}<br>
+  </div>
+</script>
+
+<script type="text/javascript" src="../../assets/scripts/bundles/core-bundle.js"></script>
+<script type="text/javascript" src="../../assets/scripts/bundles/codemirror.js"></script>
+<script type="text/javascript" src="../../assets/scripts/codemirror.markpopovertext.js"></script>
+<script type="text/javascript" src="report.js"></script>
+<script type="text/javascript" src="report.history.js"></script>
+<script type="text/javascript" src="../../assets/scripts/plato-file.js"></script>
+</body>
+</html>

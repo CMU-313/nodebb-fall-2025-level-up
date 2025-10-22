@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Plato - activitypub/mocks.js</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="">
+  <meta name="author" content="">
+
+  <!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+
+  <link href="../../assets/css/vendor/morris.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/bootstrap.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/font-awesome.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/codemirror.css" rel="stylesheet">
+  <link href="../../assets/css/plato.css" rel="stylesheet">
+  <link href="../../assets/css/plato-file.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="navbar navbar-fixed-top">
+  <div class="container">
+    <a class="navbar-brand" href="http://github.com/es-analysis/plato">Plato on Github</a>
+    <ul class="nav navbar-nav">
+      <li>
+        <a href="../../index.html">Report Home</a>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<div class="jumbotron">
+  <div class="container">
+    <h1>activitypub/mocks.js</h1>
+  </div>
+</div>
+
+<div class="container aggregate-stats">
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Maintainability <a href="http://blogs.msdn.com/b/codeanalysis/archive/2007/11/20/maintainability-index-range-and-meaning.aspx"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="A value between 0 and 100 that represents the relative ease of maintaining the code. A high value means better maintainability." data-original-title="Maintainability Index"  data-container="body"></i></a></h2>
+      <p class="stat">54.75</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Lines of code <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h2>
+      <p class="stat">920</p>
+    </div>
+  </div>
+  <div class="row historical">
+    <div class="col-md-6">
+      <p id="chart_historical_maint" class="chart"></p>
+    </div>
+    <div class="col-md-6">
+      <p id="chart_historical_sloc" class="chart"></p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Difficulty  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="The difficulty measure is related to the difficulty of the program to write or understand." data-original-title="Difficulty" data-container="body"></i></a></h2>
+      <p class="stat">93.75</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Estimated Errors  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Halstead's delivered bugs is an estimate for the number of errors in the implementation." data-original-title="Delivered Bugs" data-container="body"></i></a></h2>
+      <p class="stat">11.56</p>
+    </div>
+  </div>
+</div>
+
+<div class="container charts">
+  <div class="row">
+    <h2 class="header">Function weight</h2>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h3 class="chart-header">By Complexity <a href="http://en.wikipedia.org/wiki/Cyclomatic_complexity"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="This metric counts the number of distinct paths through a block of code. Lower values are better." data-original-title="Cyclomatic Complexity" data-container="body"></i></a></h3>
+      <div id="fn-by-complexity" class="stat"></div>
+    </div>
+    <div class="col-md-6">
+      <h3 class="chart-header">By SLOC  <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h3>
+      <div id="fn-by-sloc" class="stat"></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="row">
+    <textarea id="file-source" class="col-md-12">&#039;use strict&#039;;
+
+const nconf = require(&#039;nconf&#039;);
+const mime = require(&#039;mime&#039;);
+const path = require(&#039;path&#039;);
+const validator = require(&#039;validator&#039;);
+const sanitize = require(&#039;sanitize-html&#039;);
+
+const db = require(&#039;../database&#039;);
+const user = require(&#039;../user&#039;);
+const categories = require(&#039;../categories&#039;);
+const posts = require(&#039;../posts&#039;);
+const topics = require(&#039;../topics&#039;);
+const messaging = require(&#039;../messaging&#039;);
+const plugins = require(&#039;../plugins&#039;);
+const slugify = require(&#039;../slugify&#039;);
+const translator = require(&#039;../translator&#039;);
+const utils = require(&#039;../utils&#039;);
+
+const accountHelpers = require(&#039;../controllers/accounts/helpers&#039;);
+
+const isEmojiShortcode = /^:[\w]+:$/;
+
+const activitypub = module.parent.exports;
+const Mocks = module.exports;
+
+/**
+ * A more restrictive html sanitization run on top of standard sanitization from core.
+ * Done so the output HTML is stripped of all non-essential items; mainly classes from plugins..
+ */
+const sanitizeConfig = {
+	allowedTags: sanitize.defaults.allowedTags.concat([&#039;img&#039;, &#039;picture&#039;, &#039;source&#039;]),
+	allowedClasses: {
+		&#039;*&#039;: [],
+	},
+	allowedAttributes: {
+		a: [&#039;href&#039;, &#039;rel&#039;],
+		source: [&#039;type&#039;, &#039;src&#039;, &#039;srcset&#039;, &#039;sizes&#039;, &#039;media&#039;, &#039;height&#039;, &#039;width&#039;],
+		img: [&#039;alt&#039;, &#039;height&#039;, &#039;ismap&#039;, &#039;src&#039;, &#039;usemap&#039;, &#039;width&#039;, &#039;srcset&#039;],
+	},
+};
+
+Mocks._normalize = async (object) =&gt; {
+	// Normalized incoming AP objects into expected types for easier mocking
+	let { type, attributedTo, url, image, mediaType, content, source, attachment, cc } = object;
+
+	switch (true) { // non-string attributedTo handling
+		case Array.isArray(attributedTo): {
+			attributedTo = attributedTo.reduce((valid, cur) =&gt; {
+				if (typeof cur === &#039;string&#039;) {
+					valid.push(cur);
+				} else if (typeof cur === &#039;object&#039;) {
+					if (cur.type === &#039;Person&#039; &amp;&amp; cur.id) {
+						valid.push(cur.id);
+					} else if (cur.type === &#039;Group&#039; &amp;&amp; cur.id) {
+						// Add any groups found to cc where it is expected
+						cc = Array.isArray(cc) ? cc : [cc];
+						cc.push(cur.id);
+					}
+				}
+
+				return valid;
+			}, []);
+			attributedTo = attributedTo.shift(); // take first valid uid
+			break;
+		}
+
+		case typeof attributedTo === &#039;object&#039; &amp;&amp; attributedTo.hasOwnProperty(&#039;id&#039;): {
+			attributedTo = attributedTo.id;
+		}
+	}
+
+	let sourceContent = source &amp;&amp; source.mediaType === &#039;text/markdown&#039; ? source.content : undefined;
+	if (sourceContent) {
+		content = null;
+		sourceContent = await activitypub.helpers.remoteAnchorToLocalProfile(sourceContent, true);
+	} else if (mediaType === &#039;text/markdown&#039;) {
+		sourceContent = await activitypub.helpers.remoteAnchorToLocalProfile(content, true);
+		content = null;
+	} else if (content &amp;&amp; content.length) {
+		content = sanitize(content, sanitizeConfig);
+		content = await activitypub.helpers.remoteAnchorToLocalProfile(content);
+	} else {
+		content = &#039;&lt;em&gt;This post did not contain any content.&lt;/em&gt;&#039;;
+	}
+
+	switch (true) {
+		case image &amp;&amp; image.hasOwnProperty(&#039;url&#039;) &amp;&amp; !!image.url: {
+			image = image.url;
+			break;
+		}
+
+		case image &amp;&amp; typeof image === &#039;string&#039;: {
+			// no change
+			break;
+		}
+
+		default: {
+			image = null;
+		}
+	}
+	if (image) {
+		const parsed = new URL(image);
+		if (!mime.getType(parsed.pathname).startsWith(&#039;image/&#039;)) {
+			activitypub.helpers.log(`[activitypub/mocks.post] Received image not identified as image due to MIME type: ${image}`);
+			image = null;
+		}
+	}
+
+	if (url) { // Handle url array
+		if (Array.isArray(url)) {
+			// Special handling for Video type (from PeerTube specifically)
+			if (type === &#039;Video&#039;) {
+				const stream = url.reduce((memo, { type, mediaType, tag }) =&gt; {
+					if (!memo) {
+						if (type === &#039;Link&#039; &amp;&amp; mediaType === &#039;application/x-mpegURL&#039;) {
+							memo = tag.reduce((memo, { type, mediaType, href, width, height }) =&gt; {
+								if (!memo &amp;&amp; (type === &#039;Link&#039; &amp;&amp; mediaType === &#039;video/mp4&#039;)) {
+									memo = { mediaType, href, width, height };
+								}
+
+								return memo;
+							}, null);
+						}
+					}
+
+					return memo;
+				}, null);
+
+				if (stream) {
+					attachment = attachment || [];
+					attachment.push(stream);
+				}
+			}
+
+			url = url.reduce((valid, cur) =&gt; {
+				if (typeof cur === &#039;string&#039;) {
+					valid.push(cur);
+				} else if (typeof cur === &#039;object&#039;) {
+					if (cur.type === &#039;Link&#039; &amp;&amp; cur.href) {
+						if (!cur.mediaType || (cur.mediaType &amp;&amp; cur.mediaType === &#039;text/html&#039;)) {
+							valid.push(cur.href);
+						}
+					}
+				}
+
+				return valid;
+			}, []);
+			url = url.shift(); // take first valid url
+		}
+	}
+
+	return {
+		...object,
+		cc,
+		attributedTo,
+		content,
+		sourceContent,
+		image,
+		url,
+		attachment,
+	};
+};
+
+Mocks.profile = async (actors) =&gt; {
+	// Should only ever be called by activitypub.actors.assert
+	const profiles = await Promise.all(actors.map(async (actor) =&gt; {
+		if (!actor) {
+			return null;
+		}
+
+		const uid = actor.id;
+		let hostname;
+		let {
+			url, preferredUsername, published, icon, image,
+			name, summary, followers, inbox, endpoints, tag,
+		} = actor;
+		preferredUsername = slugify(preferredUsername || name);
+		const { followers: followerCount, following: followingCount } = await activitypub.actors.getLocalFollowCounts(uid);
+
+		try {
+			({ hostname } = new URL(actor.id));
+		} catch (e) {
+			return null;
+		}
+
+		let picture;
+		if (icon) {
+			picture = typeof icon === &#039;string&#039; ? icon : icon.url;
+		}
+		const iconBackgrounds = await user.getIconBackgrounds();
+		let bgColor = Array.prototype.reduce.call(preferredUsername, (cur, next) =&gt; cur + next.charCodeAt(), 0);
+		bgColor = iconBackgrounds[bgColor % iconBackgrounds.length];
+
+		// Replace emoji in summary
+		if (tag &amp;&amp; Array.isArray(tag)) {
+			tag
+				.filter(tag =&gt; tag.type === &#039;Emoji&#039; &amp;&amp;
+					isEmojiShortcode.test(tag.name) &amp;&amp;
+					tag.icon &amp;&amp; tag.icon.mediaType &amp;&amp; tag.icon.mediaType.startsWith(&#039;image/&#039;))
+				.forEach((tag) =&gt; {
+					summary = summary.replace(new RegExp(tag.name, &#039;g&#039;), `&lt;img class=&quot;not-responsive emoji&quot; src=&quot;${tag.icon.url}&quot; title=&quot;${tag.name}&quot; /&gt;`);
+				});
+		}
+
+		// Add custom fields into user hash
+		const customFields = actor.attachment &amp;&amp; Array.isArray(actor.attachment) &amp;&amp; actor.attachment.length ?
+			actor.attachment
+				.filter(attachment =&gt; activitypub._constants.acceptable.customFields.has(attachment.type))
+				.reduce((map, { type, name, value, href, content }) =&gt; {
+					// Defer to new style (per FEP fb2a)
+					if (map.has(name) &amp;&amp; type === &#039;PropertyValue&#039;) {
+						return map;
+					}
+
+					// Strip html from received values (for security)
+					switch (type) {
+						case &#039;Note&#039;: {
+							value = utils.stripHTMLTags(content);
+							break;
+						}
+
+						case &#039;Link&#039;: {
+							value = utils.stripHTMLTags(href);
+							break;
+						}
+
+						case &#039;PropertyValue&#039;: {
+							value = utils.stripHTMLTags(value);
+							break;
+						}
+					}
+
+					return map.set(name, value);
+				}, new Map()) :
+			undefined;
+
+		const payload = {
+			uid,
+			username: `${preferredUsername}@${hostname}`,
+			userslug: `${preferredUsername}@${hostname}`,
+			displayname: name,
+			fullname: name,
+			joindate: new Date(published).getTime() || Date.now(),
+			picture,
+			status: &#039;offline&#039;,
+			&#039;icon:text&#039;: (preferredUsername[0] || &#039;&#039;).toUpperCase(),
+			&#039;icon:bgColor&#039;: bgColor,
+			uploadedpicture: undefined,
+			&#039;cover:url&#039;: !image || typeof image === &#039;string&#039; ? image : image.url,
+			&#039;cover:position&#039;: &#039;50% 50%&#039;,
+			aboutme: posts.sanitize(summary),
+			followerCount,
+			followingCount,
+
+			url,
+			inbox,
+			sharedInbox: endpoints ? endpoints.sharedInbox : null,
+			followersUrl: followers,
+			customFields: customFields &amp;&amp; new URLSearchParams(customFields).toString(),
+		};
+
+		return payload;
+	}));
+
+	return profiles;
+};
+
+Mocks.category = async (actors) =&gt; {
+	const categories = await Promise.all(actors.map(async (actor) =&gt; {
+		if (!actor) {
+			return null;
+		}
+
+		const cid = actor.id;
+		let hostname;
+		let {
+			url, preferredUsername, icon, /* image, */
+			name, summary, followers, inbox, endpoints, tag,
+		} = actor;
+		preferredUsername = slugify(preferredUsername || name);
+		/*
+		const {
+			followers: followerCount,
+			following: followingCount
+		} = await activitypub.actors.getLocalFollowCounts(uid);
+		*/
+
+		try {
+			({ hostname } = new URL(actor.id));
+		} catch (e) {
+			return null;
+		}
+
+		// No support for category avatars yet ;(
+		// let picture;
+		// if (image) {
+		// picture = typeof image === &#039;string&#039; ? image : image.url;
+		// }
+		const iconBackgrounds = await user.getIconBackgrounds();
+		let bgColor = Array.prototype.reduce.call(preferredUsername, (cur, next) =&gt; cur + next.charCodeAt(), 0);
+		bgColor = iconBackgrounds[bgColor % iconBackgrounds.length];
+
+		const backgroundImage = !icon || typeof icon === &#039;string&#039; ? icon : icon.url;
+
+		// Replace emoji in summary
+		if (tag &amp;&amp; Array.isArray(tag)) {
+			tag
+				.filter(tag =&gt; tag.type === &#039;Emoji&#039; &amp;&amp;
+					isEmojiShortcode.test(tag.name) &amp;&amp;
+					tag.icon &amp;&amp; tag.icon.mediaType &amp;&amp; tag.icon.mediaType.startsWith(&#039;image/&#039;))
+				.forEach((tag) =&gt; {
+					summary = summary.replace(new RegExp(tag.name, &#039;g&#039;), `&lt;img class=&quot;not-responsive emoji&quot; src=&quot;${tag.icon.url}&quot; title=&quot;${tag.name}&quot; /&gt;`);
+				});
+		}
+
+		const payload = {
+			cid,
+			name,
+			handle: preferredUsername,
+			slug: `${preferredUsername}@${hostname}`,
+			description: summary,
+			descriptionParsed: posts.sanitize(summary),
+			icon: backgroundImage ? &#039;fa-none&#039; : &#039;fa-comments&#039;,
+			color: &#039;#fff&#039;,
+			bgColor,
+			backgroundImage,
+			imageClass: &#039;cover&#039;,
+			numRecentReplies: 1,
+			// followerCount,
+			// followingCount,
+
+			url,
+			inbox,
+			sharedInbox: endpoints ? endpoints.sharedInbox : null,
+			followersUrl: followers,
+		};
+
+		return payload;
+	}));
+
+	return categories;
+};
+
+Mocks.post = async (objects) =&gt; {
+	let single = false;
+	if (!Array.isArray(objects)) {
+		single = true;
+		objects = [objects];
+	}
+
+	const posts = await Promise.all(objects.map(async (object) =&gt; {
+		object = await Mocks._normalize(object);
+
+		if (
+			!activitypub._constants.acceptedPostTypes.includes(object.type) ||
+			!activitypub.helpers.isUri(object.id) // sanity-check the id
+		) {
+			return null;
+		}
+
+		let {
+			id: pid,
+			url,
+			attributedTo: uid,
+			inReplyTo: toPid,
+			published, updated, name, content, sourceContent,
+			to, cc, audience, attachment, tag, image,
+		} = object;
+
+		await activitypub.actors.assert(uid);
+
+		const resolved = await activitypub.helpers.resolveLocalId(toPid);
+		if (resolved.type === &#039;post&#039;) {
+			toPid = resolved.id;
+		}
+
+		const timestamp = new Date(published).getTime();
+		let edited = new Date(updated);
+		edited = Number.isNaN(edited.valueOf()) ? undefined : edited;
+
+		const payload = {
+			uid,
+			pid,
+			// tid,  --&gt; purposely omitted
+			content,
+			sourceContent,
+			timestamp,
+			toPid,
+
+			title: name, // used in post.edit
+
+			edited,
+			editor: edited ? uid : undefined,
+			_activitypub: { to, cc, audience, attachment, tag, url, image },
+		};
+
+		return payload;
+	}));
+
+	return single ? posts.pop() : posts;
+};
+
+Mocks.message = async (object) =&gt; {
+	object = await Mocks._normalize(object);
+
+	const message = {
+		mid: object.id,
+		uid: object.attributedTo,
+		content: object.sourceContent || object.content,
+		// ip: caller.ip,
+	};
+
+	return message;
+};
+
+Mocks.actors = {};
+
+Mocks.actors.user = async (uid) =&gt; {
+	const userData = await user.getUserData(uid);
+	let { username, userslug, displayname, fullname, joindate, aboutme, picture, &#039;cover:url&#039;: cover } = userData;
+	let fields = await accountHelpers.getCustomUserFields(0, userData);
+	const publicKey = await activitypub.getPublicKey(&#039;uid&#039;, uid);
+
+	let aboutmeParsed = &#039;&#039;;
+	if (aboutme) {
+		aboutme = validator.escape(String(aboutme || &#039;&#039;));
+		aboutmeParsed = await plugins.hooks.fire(&#039;filter:parse.aboutme&#039;, aboutme);
+		aboutmeParsed = translator.escape(aboutmeParsed);
+	}
+
+	if (picture) {
+		const imagePath = await user.getLocalAvatarPath(uid);
+		picture = {
+			type: &#039;Image&#039;,
+			mediaType: mime.getType(imagePath),
+			url: `${nconf.get(&#039;url&#039;)}${picture}`,
+		};
+	}
+
+	if (cover) {
+		const imagePath = await user.getLocalCoverPath(uid);
+		cover = {
+			type: &#039;Image&#039;,
+			mediaType: mime.getType(imagePath),
+			url: `${nconf.get(&#039;url&#039;)}${cover}`,
+		};
+	}
+
+	const attachment = [];
+	// Translate field names and values
+	fields = await Promise.all(fields.map(async (field) =&gt; {
+		const [name, value] = await Promise.all([
+			translator.translate(field.name),
+			translator.translate(field.value),
+		]);
+		field = { ...field, ...{ name, value } };
+		return field;
+	}));
+	fields.forEach(({ type, name, value }) =&gt; {
+		if (value) {
+			if (type === &#039;input-link&#039;) {
+				attachment.push({
+					type: &#039;Link&#039;,
+					name,
+					href: value,
+				});
+			} else {
+				attachment.push({
+					type: &#039;Note&#039;,
+					name,
+					content: value,
+				});
+			}
+
+			// Backwards compatibility
+			attachment.push({
+				type: &#039;PropertyValue&#039;,
+				name,
+				value,
+			});
+		}
+	});
+
+	return {
+		&#039;@context&#039;: [
+			&#039;https://www.w3.org/ns/activitystreams&#039;,
+			&#039;https://w3id.org/security/v1&#039;,
+		],
+		id: `${nconf.get(&#039;url&#039;)}/uid/${uid}`,
+		url: `${nconf.get(&#039;url&#039;)}/user/${userslug}`,
+		followers: `${nconf.get(&#039;url&#039;)}/uid/${uid}/followers`,
+		following: `${nconf.get(&#039;url&#039;)}/uid/${uid}/following`,
+		inbox: `${nconf.get(&#039;url&#039;)}/uid/${uid}/inbox`,
+		outbox: `${nconf.get(&#039;url&#039;)}/uid/${uid}/outbox`,
+
+		type: &#039;Person&#039;,
+		name: username !== displayname ? fullname : username, // displayname is escaped, fullname is not
+		preferredUsername: userslug,
+		summary: aboutmeParsed,
+		icon: picture,
+		image: cover,
+		published: new Date(joindate).toISOString(),
+		attachment,
+
+		publicKey: {
+			id: `${nconf.get(&#039;url&#039;)}/uid/${uid}#key`,
+			owner: `${nconf.get(&#039;url&#039;)}/uid/${uid}`,
+			publicKeyPem: publicKey,
+		},
+
+		endpoints: {
+			sharedInbox: `${nconf.get(&#039;url&#039;)}/inbox`,
+		},
+	};
+};
+
+Mocks.actors.category = async (cid) =&gt; {
+	let {
+		name, handle: preferredUsername, slug,
+		descriptionParsed: summary, federatedDescription, backgroundImage,
+	} = await categories.getCategoryFields(cid,
+		[&#039;name&#039;, &#039;handle&#039;, &#039;slug&#039;, &#039;description&#039;, &#039;descriptionParsed&#039;, &#039;federatedDescription&#039;, &#039;backgroundImage&#039;]);
+	const publicKey = await activitypub.getPublicKey(&#039;cid&#039;, cid);
+
+	let icon;
+	if (backgroundImage) {
+		const filename = path.basename(utils.decodeHTMLEntities(backgroundImage));
+		icon = {
+			type: &#039;Image&#039;,
+			mediaType: mime.getType(filename),
+			url: `${nconf.get(&#039;url&#039;)}${utils.decodeHTMLEntities(backgroundImage)}`,
+		};
+	} else {
+		icon = await categories.icons.get(cid);
+		icon = icon.get(&#039;png&#039;);
+		icon = {
+			type: &#039;Image&#039;,
+			mediaType: &#039;image/png&#039;,
+			url: `${nconf.get(&#039;url&#039;)}${icon}`,
+		};
+	}
+
+	// Append federated desc.
+	const fallback = await translator.translate(&#039;[[admin/manage/categories:federatedDescription.default]]&#039;);
+	summary += `&lt;hr /&gt;&lt;p dir=&quot;auto&quot;&gt;${federatedDescription || fallback}&lt;/p&gt;\n`;
+
+	return {
+		&#039;@context&#039;: [
+			&#039;https://www.w3.org/ns/activitystreams&#039;,
+			&#039;https://w3id.org/security/v1&#039;,
+		],
+		id: `${nconf.get(&#039;url&#039;)}/category/${cid}`,
+		url: `${nconf.get(&#039;url&#039;)}/category/${slug}`,
+		// followers: ,
+		//  following: ,
+		inbox: `${nconf.get(&#039;url&#039;)}/category/${cid}/inbox`,
+		outbox: `${nconf.get(&#039;url&#039;)}/category/${cid}/outbox`,
+
+		type: &#039;Group&#039;,
+		name,
+		preferredUsername,
+		summary,
+		// image, // todo once categories have cover photos
+		icon,
+
+		publicKey: {
+			id: `${nconf.get(&#039;url&#039;)}/category/${cid}#key`,
+			owner: `${nconf.get(&#039;url&#039;)}/category/${cid}`,
+			publicKeyPem: publicKey,
+		},
+
+		endpoints: {
+			sharedInbox: `${nconf.get(&#039;url&#039;)}/inbox`,
+		},
+	};
+};
+
+Mocks.notes = {};
+
+Mocks.notes.public = async (post) =&gt; {
+	const id = `${nconf.get(&#039;url&#039;)}/post/${post.pid}`;
+
+	// Return a tombstone for a deleted post
+	if (post.deleted === true) {
+		return Mocks.tombstone({
+			id,
+			formerType: &#039;Note&#039;,
+			attributedTo: `${nconf.get(&#039;url&#039;)}/uid/${post.user.uid}`,
+			context: `${nconf.get(&#039;url&#039;)}/topic/${post.topic.tid}`,
+			audience: `${nconf.get(&#039;url&#039;)}/category/${post.category.cid}`,
+		});
+	}
+
+	const published = post.timestampISO;
+	const updated = post.edited ? post.editedISO : null;
+
+	const to = new Set([activitypub._constants.publicAddress]);
+	const cc = new Set([`${nconf.get(&#039;url&#039;)}/uid/${post.user.uid}/followers`]);
+
+	let inReplyTo = null;
+	let tag = null;
+	let followersUrl;
+	const isMainPost = post.pid === post.topic.mainPid;
+
+	let name = null;
+	({ titleRaw: name } = await topics.getTopicFields(post.tid, [&#039;title&#039;]));
+
+	if (post.toPid) { // direct reply
+		inReplyTo = utils.isNumber(post.toPid) ? `${nconf.get(&#039;url&#039;)}/post/${post.toPid}` : post.toPid;
+		name = `Re: ${name}`;
+
+		const parentId = await posts.getPostField(post.toPid, &#039;uid&#039;);
+		followersUrl = await user.getUserField(parentId, &#039;followersUrl&#039;);
+		to.add(utils.isNumber(parentId) ? `${nconf.get(&#039;url&#039;)}/uid/${parentId}` : parentId);
+	} else if (!post.isMainPost) { // reply to OP
+		inReplyTo = utils.isNumber(post.topic.mainPid) ? `${nconf.get(&#039;url&#039;)}/post/${post.topic.mainPid}` : post.topic.mainPid;
+		name = `Re: ${name}`;
+
+		to.add(utils.isNumber(post.topic.uid) ? `${nconf.get(&#039;url&#039;)}/uid/${post.topic.uid}` : post.topic.uid);
+		followersUrl = await user.getUserField(post.topic.uid, &#039;followersUrl&#039;);
+	} else { // new topic
+		tag = post.topic.tags.map(tag =&gt; ({
+			type: &#039;Hashtag&#039;,
+			href: `${nconf.get(&#039;url&#039;)}/tags/${tag.valueEncoded}`,
+			name: `#${tag.value}`,
+		}));
+	}
+
+	if (followersUrl) {
+		cc.add(followersUrl);
+	}
+
+	const content = await posts.getPostField(post.pid, &#039;content&#039;);
+	post.content = content; // re-send raw content into parsePost
+	const parsed = await posts.parsePost(post, &#039;activitypub.note&#039;);
+	post.content = sanitize(parsed.content, sanitizeConfig);
+	post.content = posts.relativeToAbsolute(post.content, posts.urlRegex);
+	post.content = posts.relativeToAbsolute(post.content, posts.imgRegex);
+
+	let source = null;
+	const [markdownEnabled, mentionsEnabled] = await Promise.all([
+		plugins.isActive(&#039;nodebb-plugin-markdown&#039;),
+		plugins.isActive(&#039;nodebb-plugin-mentions&#039;),
+	]);
+	if (markdownEnabled) {
+		// Re-parse for markdown
+		const _post = { ...post };
+		const raw = await posts.getPostField(post.pid, &#039;content&#039;);
+		_post.content = raw;
+		let { content } = await posts.parsePost(_post, &#039;markdown&#039;);
+		content = posts.relativeToAbsolute(content, posts.mdImageUrlRegex);
+		source = {
+			content,
+			mediaType: &#039;text/markdown&#039;,
+		};
+	}
+	if (mentionsEnabled) {
+		const mentions = require.main.require(&#039;nodebb-plugin-mentions&#039;);
+		const matches = await mentions.getMatches(content);
+
+		if (matches.size) {
+			tag = tag || [];
+			tag.push(...Array.from(matches).map(({ type, id: href, slug: name }) =&gt; {
+				if (utils.isNumber(href)) { // local ref
+					name = name.toLowerCase(); // local slugs are always lowercase
+					href = `${nconf.get(&#039;url&#039;)}/${type === &#039;uid&#039; ? &#039;user&#039; : `category/${href}`}/${name.slice(1)}`;
+					name = `${name}@${nconf.get(&#039;url_parsed&#039;).hostname}`;
+				}
+
+				return {
+					type: &#039;Mention&#039;,
+					href,
+					name,
+				};
+			}));
+
+			Array.from(matches)
+				.reduce((ids, { id }) =&gt; {
+					if (!utils.isNumber(id) &amp;&amp; !to.has(id) &amp;&amp; !cc.has(id)) {
+						ids.push(id);
+					}
+
+					return ids;
+				}, [])
+				.forEach(id =&gt; cc.add(id));
+		}
+	}
+
+	let attachment = await posts.attachments.get(post.pid) || [];
+	const normalizeAttachment = attachment =&gt; attachment.map(({ mediaType, url, width, height }) =&gt; {
+		let type;
+
+		switch (true) {
+			case mediaType &amp;&amp; mediaType.startsWith(&#039;image&#039;): {
+				type = &#039;Image&#039;;
+				break;
+			}
+
+			default: {
+				type = &#039;Link&#039;;
+				break;
+			}
+		}
+
+		const payload = { type, mediaType, url };
+
+		if (width || height) {
+			payload.width = width;
+			payload.height = height;
+		}
+
+		return payload;
+	});
+
+	// Special handling for main posts (as:Article w/ as:Note preview)
+	const noteAttachment = isMainPost ? [...attachment] : null;
+	const uploads = await posts.uploads.listWithSizes(post.pid);
+	const isThumb = await db.isSortedSetMembers(`topic:${post.tid}:thumbs`, uploads.map(u =&gt; u.name));
+	uploads.forEach(({ name, width, height }, idx) =&gt; {
+		const mediaType = mime.getType(name);
+		const url = `${nconf.get(&#039;url&#039;) + nconf.get(&#039;upload_url&#039;)}/${name}`;
+		(noteAttachment || attachment).push({ mediaType, url, width, height });
+		if (isThumb[idx] &amp;&amp; noteAttachment) {
+			attachment.push({ mediaType, url, width, height });
+		}
+	});
+
+	// Inspect post content for external imagery as well
+	let match = posts.imgRegex.exec(post.content);
+	while (match !== null) {
+		if (match[1]) {
+			const { hostname, pathname, href: url } = new URL(match[1]);
+			if (hostname !== nconf.get(&#039;url_parsed&#039;).hostname) {
+				const mediaType = mime.getType(pathname);
+				(noteAttachment || attachment).push({ mediaType, url });
+			}
+		}
+		match = posts.imgRegex.exec(post.content);
+	}
+
+	attachment = normalizeAttachment(attachment);
+	let preview;
+	let summary = null;
+	if (isMainPost) {
+		preview = {
+			type: &#039;Note&#039;,
+			attributedTo: `${nconf.get(&#039;url&#039;)}/uid/${post.user.uid}`,
+			content: post.content,
+			published,
+			attachment: normalizeAttachment(noteAttachment),
+		};
+
+		summary = post.content;
+	}
+
+	let context = await posts.getPostField(post.pid, &#039;context&#039;);
+	context = context || `${nconf.get(&#039;url&#039;)}/topic/${post.topic.tid}`;
+
+	/**
+	 * audience is exposed as part of 1b12 but is now ignored by Lemmy.
+	 * Remove this and most references to audience in 2026.
+	 */
+	let audience = utils.isNumber(post.category.cid) ? // default
+		`${nconf.get(&#039;url&#039;)}/category/${post.category.cid}` : post.category.cid;
+	if (inReplyTo) {
+		const chain = await activitypub.notes.getParentChain(post.uid, inReplyTo);
+		chain.forEach((post) =&gt; {
+			audience = post.audience || audience;
+		});
+	}
+	to.add(audience);
+
+	let object = {
+		&#039;@context&#039;: &#039;https://www.w3.org/ns/activitystreams&#039;,
+		id,
+		type: isMainPost ? &#039;Article&#039; : &#039;Note&#039;,
+		to: Array.from(to),
+		cc: Array.from(cc),
+		inReplyTo,
+		published,
+		updated,
+		url: id,
+		attributedTo: `${nconf.get(&#039;url&#039;)}/uid/${post.user.uid}`,
+		context,
+		audience,
+		summary,
+		name,
+		preview,
+		content: post.content,
+		source,
+		tag,
+		attachment,
+		replies: `${id}/replies`,
+	};
+
+	({ object } = await plugins.hooks.fire(&#039;filter:activitypub.mocks.note&#039;, { object, post, private: false }));
+	return object;
+};
+
+Mocks.notes.private = async ({ messageObj }) =&gt; {
+	const id = `${nconf.get(&#039;url&#039;)}/message/${messageObj.mid}`;
+
+	// Return a tombstone for a deleted message
+	if (messageObj.deleted === 1) {
+		return Mocks.tombstone({
+			id,
+			formerType: &#039;Note&#039;,
+			attributedTo: `${nconf.get(&#039;url&#039;)}/uid/${messageObj.fromuid}`,
+			// context: `${nconf.get(&#039;url&#039;)}/topic/${post.topic.tid}`,
+		});
+	}
+
+	let uids = await messaging.getUidsInRoom(messageObj.roomId, 0, -1);
+	uids = uids.filter(uid =&gt; String(uid) !== String(messageObj.fromuid)); // no author
+	const to = new Set(uids.map(uid =&gt; (utils.isNumber(uid) ? `${nconf.get(&#039;url&#039;)}/uid/${uid}` : uid)));
+	const published = messageObj.timestampISO;
+	const updated = messageObj.edited ? messageObj.editedISO : undefined;
+
+	let source;
+	const markdownEnabled = await plugins.isActive(&#039;nodebb-plugin-markdown&#039;);
+	if (markdownEnabled) {
+		let { content } = messageObj;
+		content = posts.relativeToAbsolute(content, posts.mdImageUrlRegex);
+
+		source = {
+			content,
+			mediaType: &#039;text/markdown&#039;,
+		};
+	}
+
+	const mentions = await user.getUsersFields(uids, [&#039;uid&#039;, &#039;userslug&#039;]);
+	const tag = [];
+	tag.push(...mentions.map(({ uid, userslug }) =&gt; ({
+		type: &#039;Mention&#039;,
+		href: utils.isNumber(uid) ? `${nconf.get(&#039;url&#039;)}/uid/${uid}` : uid,
+		name: utils.isNumber(uid) ? `${userslug}@${nconf.get(&#039;url_parsed&#039;).hostname}` : userslug,
+	})));
+
+	let inReplyTo;
+	if (messageObj.toMid) {
+		inReplyTo = utils.isNumber(messageObj.toMid) ?
+			`${nconf.get(&#039;url&#039;)}/message/${messageObj.toMid}` :
+			messageObj.toMid;
+	}
+	if (!inReplyTo) {
+		// Get immediately preceding message
+		const index = await db.sortedSetRank(`chat:room:${messageObj.roomId}:mids`, messageObj.mid);
+		if (index &gt; 0) {
+			const mids = await db.getSortedSetRevRange(`chat:room:${messageObj.roomId}:mids`, 1, -1);
+			let isSystem = await messaging.getMessagesFields(mids, [&#039;system&#039;]);
+			isSystem = isSystem.map(o =&gt; o.system);
+			inReplyTo = mids.reduce((memo, mid, idx) =&gt; (memo || (!isSystem[idx] ? mid : undefined)), undefined);
+			inReplyTo = utils.isNumber(inReplyTo) ? `${nconf.get(&#039;url&#039;)}/message/${inReplyTo}` : inReplyTo;
+		}
+	}
+
+	let object = {
+		&#039;@context&#039;: &#039;https://www.w3.org/ns/activitystreams&#039;,
+		id,
+		type: &#039;Note&#039;,
+		to: Array.from(to),
+		cc: [],
+		inReplyTo,
+		published,
+		updated,
+		url: id,
+		attributedTo: `${nconf.get(&#039;url&#039;)}/uid/${messageObj.fromuid}`,
+		// context: `${nconf.get(&#039;url&#039;)}/topic/${post.topic.tid}`,
+		// audience: `${nconf.get(&#039;url&#039;)}/category/${post.category.cid}`,
+		summary: null,
+		// name,
+		content: messageObj.content,
+		source,
+		tag,
+		// attachment: [], // todo
+		// replies: `${id}/replies`, // todo
+	};
+
+	({ object } = await plugins.hooks.fire(&#039;filter:activitypub.mocks.note&#039;, { object, post: messageObj, private: false }));
+	return object;
+};
+
+Mocks.activities = {};
+
+Mocks.activities.create = async (pid, uid, post) =&gt; {
+	// Local objects only, post optional
+	if (!utils.isNumber(pid)) {
+		throw new Error(&#039;[[error:invalid-pid]]&#039;);
+	}
+
+	if (!post) {
+		post = (await posts.getPostSummaryByPids([pid], uid, { stripTags: false })).pop();
+		if (!post) {
+			throw new Error(&#039;[[error:invalid-pid]]&#039;);
+		}
+	}
+
+	const object = await activitypub.mocks.notes.public(post);
+	const { to, cc, targets } = await activitypub.buildRecipients(object, { pid, uid: post.user.uid });
+	object.to = to;
+	object.cc = cc;
+
+	const activity = {
+		id: `${object.id}#activity/create/${Date.now()}`,
+		type: &#039;Create&#039;,
+		actor: object.attributedTo,
+		to,
+		cc,
+		object,
+	};
+
+	return { activity, targets };
+};
+
+Mocks.tombstone = async properties =&gt; ({
+	&#039;@context&#039;: &#039;https://www.w3.org/ns/activitystreams&#039;,
+	type: &#039;Tombstone&#039;,
+	...properties,
+});</textarea>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="container">
+    <p>.</p>
+  </div>
+</footer>
+
+<script type="text/html" id="complexity-popover-template">
+  <div class="complexity-notice">
+    Complexity : {{ cyclomatic }} <br>
+    Length : {{ halstead.length }} <br>
+    Difficulty : {{ halstead.difficulty.toFixed(2) }} <br>
+    Est # bugs : {{ halstead.bugs.toFixed(2) }}<br>
+  </div>
+</script>
+
+<script type="text/javascript" src="../../assets/scripts/bundles/core-bundle.js"></script>
+<script type="text/javascript" src="../../assets/scripts/bundles/codemirror.js"></script>
+<script type="text/javascript" src="../../assets/scripts/codemirror.markpopovertext.js"></script>
+<script type="text/javascript" src="report.js"></script>
+<script type="text/javascript" src="report.history.js"></script>
+<script type="text/javascript" src="../../assets/scripts/plato-file.js"></script>
+</body>
+</html>

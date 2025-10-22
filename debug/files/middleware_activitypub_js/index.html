@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Plato - middleware/activitypub.js</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="">
+  <meta name="author" content="">
+
+  <!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+
+  <link href="../../assets/css/vendor/morris.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/bootstrap.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/font-awesome.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/codemirror.css" rel="stylesheet">
+  <link href="../../assets/css/plato.css" rel="stylesheet">
+  <link href="../../assets/css/plato-file.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="navbar navbar-fixed-top">
+  <div class="container">
+    <a class="navbar-brand" href="http://github.com/es-analysis/plato">Plato on Github</a>
+    <ul class="nav navbar-nav">
+      <li>
+        <a href="../../index.html">Report Home</a>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<div class="jumbotron">
+  <div class="container">
+    <h1>middleware/activitypub.js</h1>
+  </div>
+</div>
+
+<div class="container aggregate-stats">
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Maintainability <a href="http://blogs.msdn.com/b/codeanalysis/archive/2007/11/20/maintainability-index-range-and-meaning.aspx"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="A value between 0 and 100 that represents the relative ease of maintaining the code. A high value means better maintainability." data-original-title="Maintainability Index"  data-container="body"></i></a></h2>
+      <p class="stat">66.92</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Lines of code <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h2>
+      <p class="stat">165</p>
+    </div>
+  </div>
+  <div class="row historical">
+    <div class="col-md-6">
+      <p id="chart_historical_maint" class="chart"></p>
+    </div>
+    <div class="col-md-6">
+      <p id="chart_historical_sloc" class="chart"></p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Difficulty  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="The difficulty measure is related to the difficulty of the program to write or understand." data-original-title="Difficulty" data-container="body"></i></a></h2>
+      <p class="stat">36.08</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Estimated Errors  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Halstead's delivered bugs is an estimate for the number of errors in the implementation." data-original-title="Delivered Bugs" data-container="body"></i></a></h2>
+      <p class="stat">1.99</p>
+    </div>
+  </div>
+</div>
+
+<div class="container charts">
+  <div class="row">
+    <h2 class="header">Function weight</h2>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h3 class="chart-header">By Complexity <a href="http://en.wikipedia.org/wiki/Cyclomatic_complexity"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="This metric counts the number of distinct paths through a block of code. Lower values are better." data-original-title="Cyclomatic Complexity" data-container="body"></i></a></h3>
+      <div id="fn-by-complexity" class="stat"></div>
+    </div>
+    <div class="col-md-6">
+      <h3 class="chart-header">By SLOC  <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h3>
+      <div id="fn-by-sloc" class="stat"></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="row">
+    <textarea id="file-source" class="col-md-12">&#039;use strict&#039;;
+
+const db = require(&#039;../database&#039;);
+const meta = require(&#039;../meta&#039;);
+const activitypub = require(&#039;../activitypub&#039;);
+
+const middleware = module.exports;
+
+middleware.enabled = async (req, res, next) =&gt; next(!meta.config.activitypubEnabled ? &#039;route&#039; : undefined);
+
+middleware.assertS2S = async function (req, res, next) {
+	// For whatever reason, express accepts does not recognize &quot;profile&quot; as a valid differentiator
+	// Therefore, manual header parsing is used here.
+	const { accept, &#039;content-type&#039;: contentType } = req.headers;
+	if (!(accept || contentType)) {
+		return next(&#039;route&#039;);
+	}
+
+	const pass = activitypub.helpers.assertAccept(accept) ||
+		(contentType &amp;&amp; activitypub._constants.acceptableTypes.includes(contentType));
+
+	if (!pass) {
+		return next(&#039;route&#039;);
+	}
+
+	next();
+};
+
+middleware.verify = async function (req, res, next) {
+	// Verifies the HTTP Signature if present (required for POST)
+	const passthrough = [/\/actor/, /\/uid\/\d+/];
+	if (req.method === &#039;GET&#039; &amp;&amp; passthrough.some(regex =&gt; regex.test(req.path))) {
+		return next();
+	}
+
+	if (req.method === &#039;POST&#039;) {
+		const verified = await activitypub.verify(req);
+		if (!verified) {
+			activitypub.helpers.log(&#039;[middleware/activitypub] HTTP signature verification failed.&#039;);
+			return res.sendStatus(400);
+		}
+	}
+
+	// Set calling user
+	if (req.headers.signature) {
+		const keyId = req.headers.signature.split(&#039;,&#039;).filter(line =&gt; line.startsWith(&#039;keyId=&quot;&#039;));
+		if (keyId.length) {
+			req.uid = keyId.shift().slice(7, -1).replace(/#.*$/, &#039;&#039;);
+		}
+	}
+
+	activitypub.helpers.log(&#039;[middleware/activitypub] HTTP signature verification passed.&#039;);
+	next();
+};
+
+middleware.assertPayload = async function (req, res, next) {
+	// Checks the validity of the incoming payload against the sender and rejects on failure
+	activitypub.helpers.log(&#039;[middleware/activitypub] Validating incoming payload...&#039;);
+
+	// Sanity-check payload schema
+	const required = [&#039;id&#039;, &#039;type&#039;, &#039;actor&#039;, &#039;object&#039;];
+	if (!required.every(prop =&gt; req.body.hasOwnProperty(prop))) {
+		activitypub.helpers.log(&#039;[middleware/activitypub] Request body missing required properties.&#039;);
+		return res.sendStatus(400);
+	}
+	activitypub.helpers.log(&#039;[middleware/activitypub] Request body check passed.&#039;);
+
+	// History check
+	const seen = await db.isSortedSetMember(&#039;activities:datetime&#039;, req.body.id);
+	if (seen) {
+		activitypub.helpers.log(`[middleware/activitypub] Activity already seen, ignoring (${req.body.id}).`);
+		return res.sendStatus(200);
+	}
+
+	let { actor, object } = req.body;
+
+	// Actor normalization
+	if (typeof actor === &#039;object&#039; &amp;&amp; actor.hasOwnProperty(&#039;id&#039;)) {
+		actor = actor.id;
+		req.body.actor = actor;
+	}
+	if (Array.isArray(actor)) {
+		actor = actor.map(a =&gt; (typeof a === &#039;string&#039; ? a : a.id));
+		req.body.actor = actor;
+	}
+
+	// Domain check
+	const { hostname } = new URL(actor);
+	const allowed = await activitypub.instances.isAllowed(hostname);
+	if (!allowed) {
+		activitypub.helpers.log(`[middleware/activitypub] Blocked incoming activity from ${hostname}.`);
+		return res.sendStatus(403);
+	}
+	await db.sortedSetAdd(&#039;instances:lastSeen&#039;, Date.now(), hostname);
+
+	// Origin checking
+	if (typeof object !== &#039;string&#039; &amp;&amp; object.hasOwnProperty(&#039;id&#039;)) {
+		const actorHostnames = Array.isArray(actor) ? actor.map(a =&gt; new URL(a).hostname) : [new URL(actor).hostname];
+		const objectHostname = new URL(object.id).hostname;
+		// require that all actors have the same hostname as the object for now
+		if (!actorHostnames.every(actorHostname =&gt; actorHostname === objectHostname)) {
+			activitypub.helpers.log(&#039;[middleware/activitypub] Origin check failed, stripping object down to id.&#039;);
+			req.body.object = [object.id];
+		}
+		activitypub.helpers.log(&#039;[middleware/activitypub] Origin check passed.&#039;);
+	}
+
+	// Cross-check key ownership against received actor
+	await activitypub.actors.assert(actor);
+	let compare = await db.getObjectsFields([
+		`userRemote:${actor}:keys`, `categoryRemote:${actor}:keys`,
+	], [&#039;id&#039;]);
+	compare = compare.reduce((keyId, { id }) =&gt; keyId || id || &#039;&#039;, &#039;&#039;).replace(/#[\w-]+$/, &#039;&#039;);
+
+	const { signature } = req.headers;
+	let keyId = new Map(signature.split(&#039;,&#039;).filter(Boolean).map((v) =&gt; {
+		const index = v.indexOf(&#039;=&#039;);
+		return [v.substring(0, index), v.slice(index + 1)];
+	})).get(&#039;keyId&#039;);
+	keyId = (keyId || &#039;&#039;).slice(1, -1).replace(/#[\w-]+$/, &#039;&#039;);
+	if (compare !== keyId) {
+		activitypub.helpers.log(&#039;[middleware/activitypub] Key ownership cross-check failed.&#039;);
+		return res.sendStatus(403);
+	}
+	activitypub.helpers.log(&#039;[middleware/activitypub] Key ownership cross-check passed.&#039;);
+
+	next();
+};
+
+middleware.resolveObjects = async function (req, res, next) {
+	const { type, object } = req.body;
+	if (type !== &#039;Delete&#039; &amp;&amp; (typeof object === &#039;string&#039; || (Array.isArray(object) &amp;&amp; object.every(o =&gt; typeof o === &#039;string&#039;)))) {
+		activitypub.helpers.log(&#039;[middleware/activitypub] Resolving object(s)...&#039;);
+		try {
+			req.body.object = await activitypub.helpers.resolveObjects(object);
+			activitypub.helpers.log(&#039;[middleware/activitypub] Object(s) successfully resolved.&#039;);
+		} catch (e) {
+			activitypub.helpers.log(&#039;[middleware/activitypub] Failed to resolve object(s).&#039;);
+			return res.sendStatus(424);
+		}
+	}
+
+	next();
+};
+
+// todo: deprecate... this should be handled in actor and note assertion methods instead, or perhaps via helper fn
+middleware.normalize = async function (req, res, next) {
+	// Normalizes the received data structure
+	const { body } = req;
+	const { object } = body;
+
+	// Ensure `to` and `cc` are arrays in the object
+	[&#039;to&#039;, &#039;cc&#039;].forEach((prop) =&gt; {
+		if (object[prop] &amp;&amp; typeof object[prop] === &#039;string&#039;) {
+			object[prop] = [object[prop]];
+		}
+	});
+
+	next();
+};
+
+middleware.configureResponse = async function (req, res, next) {
+	res.header(&#039;Content-Type&#039;, &#039;application/activity+json&#039;);
+	next();
+};</textarea>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="container">
+    <p>.</p>
+  </div>
+</footer>
+
+<script type="text/html" id="complexity-popover-template">
+  <div class="complexity-notice">
+    Complexity : {{ cyclomatic }} <br>
+    Length : {{ halstead.length }} <br>
+    Difficulty : {{ halstead.difficulty.toFixed(2) }} <br>
+    Est # bugs : {{ halstead.bugs.toFixed(2) }}<br>
+  </div>
+</script>
+
+<script type="text/javascript" src="../../assets/scripts/bundles/core-bundle.js"></script>
+<script type="text/javascript" src="../../assets/scripts/bundles/codemirror.js"></script>
+<script type="text/javascript" src="../../assets/scripts/codemirror.markpopovertext.js"></script>
+<script type="text/javascript" src="report.js"></script>
+<script type="text/javascript" src="report.history.js"></script>
+<script type="text/javascript" src="../../assets/scripts/plato-file.js"></script>
+</body>
+</html>

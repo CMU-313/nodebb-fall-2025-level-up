@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Plato - test/activitypub.js</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="">
+  <meta name="author" content="">
+
+  <!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+
+  <link href="../../assets/css/vendor/morris.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/bootstrap.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/font-awesome.css" rel="stylesheet">
+  <link href="../../assets/css/vendor/codemirror.css" rel="stylesheet">
+  <link href="../../assets/css/plato.css" rel="stylesheet">
+  <link href="../../assets/css/plato-file.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="navbar navbar-fixed-top">
+  <div class="container">
+    <a class="navbar-brand" href="http://github.com/es-analysis/plato">Plato on Github</a>
+    <ul class="nav navbar-nav">
+      <li>
+        <a href="../../index.html">Report Home</a>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<div class="jumbotron">
+  <div class="container">
+    <h1>test/activitypub.js</h1>
+  </div>
+</div>
+
+<div class="container aggregate-stats">
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Maintainability <a href="http://blogs.msdn.com/b/codeanalysis/archive/2007/11/20/maintainability-index-range-and-meaning.aspx"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="A value between 0 and 100 that represents the relative ease of maintaining the code. A high value means better maintainability." data-original-title="Maintainability Index"  data-container="body"></i></a></h2>
+      <p class="stat">73.86</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Lines of code <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h2>
+      <p class="stat">514</p>
+    </div>
+  </div>
+  <div class="row historical">
+    <div class="col-md-6">
+      <p id="chart_historical_maint" class="chart"></p>
+    </div>
+    <div class="col-md-6">
+      <p id="chart_historical_sloc" class="chart"></p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h2 class="header">Difficulty  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="The difficulty measure is related to the difficulty of the program to write or understand." data-original-title="Difficulty" data-container="body"></i></a></h2>
+      <p class="stat">29.64</p>
+    </div>
+    <div class="col-md-6">
+      <h2 class="header">Estimated Errors  <a href="http://en.wikipedia.org/wiki/Halstead_complexity_measures"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Halstead's delivered bugs is an estimate for the number of errors in the implementation." data-original-title="Delivered Bugs" data-container="body"></i></a></h2>
+      <p class="stat">5.45</p>
+    </div>
+  </div>
+</div>
+
+<div class="container charts">
+  <div class="row">
+    <h2 class="header">Function weight</h2>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h3 class="chart-header">By Complexity <a href="http://en.wikipedia.org/wiki/Cyclomatic_complexity"><i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="This metric counts the number of distinct paths through a block of code. Lower values are better." data-original-title="Cyclomatic Complexity" data-container="body"></i></a></h3>
+      <div id="fn-by-complexity" class="stat"></div>
+    </div>
+    <div class="col-md-6">
+      <h3 class="chart-header">By SLOC  <i class="icon icon-info-sign" rel="popover" data-placement="top" data-trigger="hover" data-content="Source Lines of Code / Logical Lines of Code" data-original-title="SLOC/LSLOC" data-container="body"></i></h3>
+      <div id="fn-by-sloc" class="stat"></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="row">
+    <textarea id="file-source" class="col-md-12">&#039;use strict&#039;;
+
+const assert = require(&#039;assert&#039;);
+const nconf = require(&#039;nconf&#039;);
+const path = require(&#039;path&#039;);
+
+const db = require(&#039;./mocks/databasemock&#039;);
+const slugify = require(&#039;../src/slugify&#039;);
+const utils = require(&#039;../src/utils&#039;);
+const request = require(&#039;../src/request&#039;);
+
+const file = require(&#039;../src/file&#039;);
+const install = require(&#039;../src/install&#039;);
+const meta = require(&#039;../src/meta&#039;);
+const user = require(&#039;../src/user&#039;);
+const categories = require(&#039;../src/categories&#039;);
+const topics = require(&#039;../src/topics&#039;);
+const posts = require(&#039;../src/posts&#039;);
+const activitypub = require(&#039;../src/activitypub&#039;);
+
+describe(&#039;ActivityPub integration&#039;, () =&gt; {
+	before(async () =&gt; {
+		meta.config.activitypubEnabled = 1;
+		meta.config.activitypubAllowLoopback = 1;
+		await install.giveWorldPrivileges();
+	});
+
+	after(() =&gt; {
+		delete meta.config.activitypubEnabled;
+	});
+
+	describe.skip(&#039;Outgoing AP logging for test runner&#039;, () =&gt; {
+		it(&#039;should log an entry in ActivityPub._sent when .send is called&#039;, async () =&gt; {
+			const uuid = utils.generateUUID();
+			const uid = await user.create({ username: uuid });
+			await activitypub.send(&#039;uid&#039;, 0, [`https://localhost/uid/${uid}`], { id: `${nconf.get(&#039;url&#039;)}/activity/${uuid}`, foo: &#039;bar&#039; });
+
+			assert(activitypub._sent.has(`${nconf.get(&#039;url&#039;)}/activity/${uuid}`));
+		});
+	});
+
+	describe(&#039;Master toggle&#039;, () =&gt; {
+		before(async () =&gt; {
+			delete meta.config.activitypubEnabled;
+		});
+
+		it(&#039;calls to activitypub.get should throw&#039;, async () =&gt; {
+			await assert.rejects(
+				activitypub.get(&#039;uid&#039;, 0, &#039;https://example.org&#039;),
+				{ message: &#039;[[error:activitypub.not-enabled]]&#039; },
+			);
+		});
+
+		it(&#039;calls to activitypub.send should silently log&#039;, async () =&gt; {
+			await activitypub.send(&#039;uid&#039;, 0, [&#039;https://example.org&#039;], { foo: &#039;bar&#039; });
+			assert.strictEqual(activitypub.helpers.log(), &#039;[activitypub/send] Federation not enabled; not sending.&#039;);
+		});
+
+		it(&#039;request for an activitypub route should return 404 Not Found&#039;, async () =&gt; {
+			const uid = user.create({ username: utils.generateUUID() });
+			const { response } = await request.get(`${nconf.get(&#039;url&#039;)}/uid/${uid}`, {
+				headers: {
+					Accept: &#039;application/ld+json; profile=&quot;https://www.w3.org/ns/activitystreams&quot;&#039;,
+				},
+			});
+
+			assert.strictEqual(response.statusCode, 404);
+		});
+
+		it(&#039;requests to the /ap endpoint should return 404 Not Found&#039;, async () =&gt; {
+			const { response } = await request.get(`${nconf.get(&#039;url&#039;)}/ap?resource=${encodeURIComponent(&#039;https://example.org&#039;)}`);
+			assert.strictEqual(response.statusCode, 404);
+		});
+
+		it(&#039;webfinger request to a local user should not indicate an application/activity+json endpoint&#039;, async () =&gt; {
+			const username = utils.generateUUID().slice(0, 8);
+			await user.create({ username });
+			const { response, body } = await request.get(`${nconf.get(&#039;url&#039;)}/.well-known/webfinger?resource=acct%3a${username}%40${nconf.get(&#039;url_parsed&#039;).host}`);
+
+			assert.strictEqual(response.statusCode, 200);
+			assert(body &amp;&amp; body.links &amp;&amp; Array.isArray(body.links));
+			assert(!body.links.some(obj =&gt; obj.type &amp;&amp; obj.type === &#039;application/activity+json&#039;));
+		});
+
+		after(() =&gt; {
+			meta.config.activitypubEnabled = 1;
+		});
+	});
+
+	describe.skip(&#039;Helpers&#039;, () =&gt; {
+		describe(&#039;.query()&#039;, () =&gt; {
+
+		});
+
+		describe(&#039;.generateKeys()&#039;, () =&gt; {
+
+		});
+
+		describe(&#039;.resolveId()&#039;, () =&gt; {
+			let url;
+			let resolved;
+
+			before(() =&gt; {
+				url = &#039;https://example.org/topic/foobar&#039;;
+				resolved = &#039;https://example.org/tid/1234&#039;;
+				activitypub._cache.set(`0;${url}`, {
+					id: resolved,
+				});
+			});
+
+			it(&#039;should return the resolved id when queried&#039;, async () =&gt; {
+				const id = await activitypub.resolveId(0, url);
+				assert.strictEqual(id, resolved);
+			});
+
+			it(&#039;should return null when the query fails&#039;, async () =&gt; {
+				const id = await activitypub.resolveId(0, &#039;https://example.org/sdlknsdfnsd&#039;);
+				assert.strictEqual(id, null);
+			});
+
+			it(&#039;should return null when the resolved host does not match the queried host&#039;, async () =&gt; {
+				const url = &#039;https://example.com/topic/foobar&#039;; // .com attempting to overwrite .org data
+				const resolved = &#039;https://example.org/tid/1234&#039;; // .org
+				activitypub._cache.set(`0;${url}`, {
+					id: resolved,
+				});
+
+				const id = await activitypub.resolveId(0, url);
+				assert.strictEqual(id, null);
+			});
+		});
+
+		describe(&#039;.resolveLocalId()&#039;, () =&gt; {
+			let uid;
+			let slug;
+
+			beforeEach(async () =&gt; {
+				slug = slugify(utils.generateUUID().slice(0, 8));
+				uid = await user.create({ username: slug });
+			});
+
+			it(&#039;should return null when an invalid input is passed in&#039;, async () =&gt; {
+				const { type, id } = await activitypub.helpers.resolveLocalId(&#039;ncl28h3qwhoiclwnevoinw3u&#039;);
+				assert.strictEqual(type, null);
+				assert.strictEqual(id, null);
+			});
+
+			it(&#039;should return null when valid input is passed but does not resolve&#039;, async () =&gt; {
+				const { type, id } = await activitypub.helpers.resolveLocalId(`acct%3afoobar@${nconf.get(&#039;url_parsed&#039;).host}`);
+				assert.strictEqual(type, &#039;user&#039;);
+				assert.strictEqual(id, null);
+			});
+
+			it(&#039;should resolve to a local uid when given a webfinger-style string&#039;, async () =&gt; {
+				const { id } = await activitypub.helpers.resolveLocalId(`acct%3a${slug}@${nconf.get(&#039;url_parsed&#039;).host}`);
+				assert.strictEqual(id, uid);
+			});
+
+			it(&#039;should resolve even without the &quot;acct:&quot; prefix&#039;, async () =&gt; {
+				const { id } = await activitypub.helpers.resolveLocalId(`${slug}@${nconf.get(&#039;url_parsed&#039;).host}`);
+				assert.strictEqual(id, uid);
+			});
+
+			it(&#039;should resolve when passed a full URL&#039;, async () =&gt; {
+				const { id } = await activitypub.helpers.resolveLocalId(`${nconf.get(&#039;url&#039;)}/user/${slug}`);
+				assert.strictEqual(id, uid);
+			});
+		});
+
+		describe(&#039;.generateTitle&#039;, () =&gt; {
+			describe(&#039;test strings&#039;, () =&gt; {
+				const cases = new Map([
+					// first paragraph element
+					[&#039;&lt;p&gt;test title&lt;/p&gt;&lt;span&gt;abc&lt;/span&gt;&#039;, &#039;test title&#039;],
+
+					// other tags like h1 or span
+					[&#039;&lt;h1&gt;Lorem ipsum dolor sit amet&lt;/h1&gt;&lt;p&gt;consectetur adipiscing elit. Integer tincidunt metus scelerisque, dignissim risus a, fermentum leo. Pellentesque eleifend ullamcorper risus tempus vestibulum. Proin mollis ipsum et magna lobortis, at pretium enim pharetra. Ut vel ex metus. Mauris faucibus lectus et nulla iaculis, et pellentesque elit pellentesque. Aliquam rhoncus nec nulla eu lacinia. Maecenas cursus iaculis ligula, eu pharetra ex suscipit sit amet.&lt;/p&gt;&#039;, &#039;Lorem ipsum dolor sit amet&#039;],
+					[&#039;&lt;span&gt;Lorem ipsum dolor sit amet&lt;/span&gt;&lt;p&gt;consectetur adipiscing elit. Integer tincidunt metus scelerisque, dignissim risus a, fermentum leo. Pellentesque eleifend ullamcorper risus tempus vestibulum. Proin mollis ipsum et magna lobortis, at pretium enim pharetra. Ut vel ex metus. Mauris faucibus lectus et nulla iaculis, et pellentesque elit pellentesque. Aliquam rhoncus nec nulla eu lacinia. Maecenas cursus iaculis ligula, eu pharetra ex suscipit sit amet.&lt;/p&gt;&#039;, &#039;Lorem ipsum dolor sit amet&#039;],
+
+					// first line&#039;s text otherwise
+					[&#039;Lorem ipsum dolor sit amet\n\nconsectetur adipiscing elit. Integer tincidunt metus scelerisque, dignissim risus a, fermentum leo. Pellentesque eleifend ullamcorper risus tempus vestibulum. Proin mollis ipsum et magna lobortis, at pretium enim pharetra. Ut vel ex metus. Mauris faucibus lectus et nulla iaculis, et pellentesque elit pellentesque. Aliquam rhoncus nec nulla eu lacinia. Maecenas cursus iaculis ligula, eu pharetra ex suscipit sit amet.&#039;, &#039;Lorem ipsum dolor sit amet&#039;],
+
+					// first sentence of matched line/element
+					[&#039;Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam a ex pellentesque, fringilla lorem non, blandit est. Nulla facilisi. Curabitur cursus neque vel enim semper, id lacinia elit facilisis. Vestibulum turpis orci, efficitur ut semper eu, faucibus eu turpis. Praesent eu odio non libero gravida tempor. Ut porta pellentesque orci. In porta nunc eget tincidunt interdum. Curabitur vel dui nec libero tempus porttitor. Phasellus tincidunt, diam id viverra suscipit, est diam maximus purus, in vestibulum dui ligula vel libero. Sed tempus finibus ante, sit amet consequat magna facilisis eget. Proin ullamcorper, velit sit amet feugiat varius, massa sem aliquam dui, non aliquam augue velit vel est. Phasellus eu sapien in purus feugiat scelerisque congue id velit. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.&#039;, &#039;Lorem ipsum dolor sit amet, consectetur adipiscing elit.&#039;],
+
+					// other sentence ending symbols
+					[&#039;Lorem ipsum dolor sit amet, consectetur adipiscing elit? Etiam a ex pellentesque, fringilla lorem non, blandit est. Nulla facilisi. Curabitur cursus neque vel enim semper, id lacinia elit facilisis. Vestibulum turpis orci, efficitur ut semper eu, faucibus eu turpis. Praesent eu odio non libero gravida tempor. Ut porta pellentesque orci. In porta nunc eget tincidunt interdum. Curabitur vel dui nec libero tempus porttitor. Phasellus tincidunt, diam id viverra suscipit, est diam maximus purus, in vestibulum dui ligula vel libero. Sed tempus finibus ante, sit amet consequat magna facilisis eget. Proin ullamcorper, velit sit amet feugiat varius, massa sem aliquam dui, non aliquam augue velit vel est. Phasellus eu sapien in purus feugiat scelerisque congue id velit. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.&#039;, &#039;Lorem ipsum dolor sit amet, consectetur adipiscing elit?&#039;],
+
+					// Content after line breaks can be discarded
+					[&#039;&lt;p&gt;Intro text&lt;br /&gt;&lt;a href=&quot;https://example.org/&quot;&gt;example.org/&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;p&gt;more text&lt;/p&gt;&#039;, &#039;Intro text&#039;],
+
+					// HTML without outer wrapping element
+					[&#039;Lorem ipsum dolor &lt;span&gt;sit amet&lt;/span&gt;&#039;, &#039;Lorem ipsum dolor sit amet&#039;],
+
+					// Two sentences with punctuation
+					[&#039;Lorem ipsum. Dolor sit amet.&#039;, &#039;Lorem ipsum.&#039;],
+
+					// Additional tests?
+					// [&#039;&#039;, &#039;&#039;],
+				]);
+
+				cases.forEach((value, key) =&gt; {
+					it(&#039;should convert as expected&#039;, () =&gt; {
+						const title = activitypub.helpers.generateTitle(key);
+						assert.strictEqual(title, value);
+					});
+				});
+			});
+
+			it(&#039;should trim down the title if it is too long per settings&#039;, () =&gt; {
+				const value = meta.config.maximumTitleLength;
+				meta.config.maximumTitleLength = 10;
+				const source = &#039;@@@@@@@@@@@@@@@@@@@@&#039;;
+				const title = activitypub.helpers.generateTitle(source);
+				assert.strictEqual(title, &#039;@@@@@@@...&#039;);
+				meta.config.maximumTitleLength = value;
+			});
+		});
+
+		describe(&#039;.remoteAnchorToLocalProfile&#039;, () =&gt; {
+			const uuid1 = utils.generateUUID();
+			const id1 = `https://example.org/uuid/${uuid1}`;
+			const url1 = `https://example.org/test`;
+			const uuid2 = utils.generateUUID();
+			const id2 = `https://example.org/uuid/${uuid2}`;
+			const localUsername = utils.generateUUID();
+			const localSlug = slugify(localUsername);
+			let localUid;
+			before(async () =&gt; {
+				// Mock up a fake remote user
+				[,,,, localUid] = await Promise.all([
+					db.setObjectField(&#039;remoteUrl:uid&#039;, url1, id1),
+					db.sortedSetAdd(&#039;usersRemote:lastCrawled&#039;, Date.now(), id2),
+					db.setObject(`userRemote:${id1}`, { uid: id1, userslug: uuid1 }),
+					db.setObject(`userRemote:${id2}`, { uid: id2, userslug: id2 }),
+					user.create({ username: localUsername }),
+				]);
+			});
+
+			it(&#039;should convert an anchor pointing to a remote user URL&#039;, async () =&gt; {
+				const content = `adsf &lt;a href=&quot;${url1}&quot;&gt;@${uuid1}&lt;/a&gt; asdf`;
+				const converted = await activitypub.helpers.remoteAnchorToLocalProfile(content);
+				assert.strictEqual(converted, `adsf &lt;a href=&quot;/user/${uuid1}&quot;&gt;@${uuid1}&lt;/a&gt; asdf`);
+			});
+
+			it(&#039;should convert an anchor pointing to a remote user id&#039;, async () =&gt; {
+				const content = `adsf &lt;a href=&quot;${id2}&quot;&gt;@${uuid2}&lt;/a&gt; asdf`;
+				const converted = await activitypub.helpers.remoteAnchorToLocalProfile(content);
+				assert.strictEqual(converted, `adsf &lt;a href=&quot;/user/${encodeURIComponent(id2)}&quot;&gt;@${uuid2}&lt;/a&gt; asdf`);
+			});
+
+			it(&#039;should convert an anchor pointing to a local user URL&#039;, async () =&gt; {
+				const content = `adsf &lt;a href=&quot;${nconf.get(&#039;url&#039;)}/user/${localSlug}&quot;&gt;@${localSlug}&lt;/a&gt; asdf`;
+				const converted = await activitypub.helpers.remoteAnchorToLocalProfile(content);
+				assert.strictEqual(converted, `adsf &lt;a href=&quot;/user/${localSlug}&quot;&gt;@${localSlug}&lt;/a&gt; asdf`);
+			});
+
+			it(&#039;should convert an anchor pointing to a local user URL&#039;, async () =&gt; {
+				const content = `adsf &lt;a href=&quot;${nconf.get(&#039;url&#039;)}/uid/${localUid}&quot;&gt;@${localSlug}&lt;/a&gt; asdf`;
+				const converted = await activitypub.helpers.remoteAnchorToLocalProfile(content);
+				assert.strictEqual(converted, `adsf &lt;a href=&quot;/user/${localSlug}&quot;&gt;@${localSlug}&lt;/a&gt; asdf`);
+			});
+
+			after(async () =&gt; {
+				await Promise.all([
+					db.deleteObjectField(&#039;remoteUrl:uid&#039;, url1),
+					db.sortedSetRemove(&#039;usersRemote:lastCrawled&#039;, id2),
+				]);
+			});
+		});
+	});
+
+	describe(&#039;ActivityPub screener middleware&#039;, () =&gt; {
+		let uid;
+
+		beforeEach(async () =&gt; {
+			uid = await user.create({ username: slugify(utils.generateUUID().slice(0, 8)) });
+		});
+
+		it(&#039;should return regular user profile html if federation is disabled&#039;, async () =&gt; {
+			delete meta.config.activitypubEnabled;
+
+			const { response, body } = await request.get(`${nconf.get(&#039;url&#039;)}/uid/${uid}`, {
+				headers: {
+					Accept: &#039;text/html&#039;,
+				},
+			});
+
+			assert(response);
+			assert.strictEqual(response.statusCode, 200);
+			assert(body.startsWith(&#039;&lt;!DOCTYPE html&gt;&#039;));
+
+			meta.config.activitypubEnabled = 1;
+		});
+
+		it(&#039;should return regular user profile html if Accept header is not ActivityPub-related&#039;, async () =&gt; {
+			const { response, body } = await request.get(`${nconf.get(&#039;url&#039;)}/uid/${uid}`, {
+				headers: {
+					Accept: &#039;text/html&#039;,
+				},
+			});
+
+			assert(response);
+			assert.strictEqual(response.statusCode, 200);
+			assert(body.startsWith(&#039;&lt;!DOCTYPE html&gt;&#039;));
+		});
+
+		it(&#039;should return the ActivityPub Actor JSON-LD payload if the correct Accept header is provided&#039;, async () =&gt; {
+			const { response, body } = await request.get(`${nconf.get(&#039;url&#039;)}/uid/${uid}`, {
+				headers: {
+					Accept: &#039;application/ld+json; profile=&quot;https://www.w3.org/ns/activitystreams&quot;&#039;,
+				},
+			});
+
+			assert(response);
+			assert.strictEqual(response.statusCode, 200);
+			assert(body.hasOwnProperty(&#039;@context&#039;));
+			assert(body[&#039;@context&#039;].includes(&#039;https://www.w3.org/ns/activitystreams&#039;));
+		});
+	});
+
+	describe(&#039;Receipt of ActivityPub events to inboxes (federating IN)&#039;, () =&gt; {
+		describe(&#039;Create&#039;, () =&gt; {
+			describe(&#039;Note&#039;, () =&gt; {
+				const slug = utils.generateUUID();
+				const id = `https://example.org/status/${slug}`;
+				const remoteNote = {
+					&#039;@context&#039;: &#039;https://www.w3.org/ns/activitystreams&#039;,
+					id,
+					url: id,
+					type: &#039;Note&#039;,
+					to: [&#039;https://www.w3.org/ns/activitystreams#Public&#039;],
+					cc: [&#039;https://example.org/user/foobar/followers&#039;],
+					inReplyTo: null,
+					attributedTo: &#039;https://example.org/user/foobar&#039;,
+					name: &#039;Foo Bar&#039;,
+					content: &#039;&lt;b&gt;Baz quux&lt;/b&gt;&#039;,
+					published: new Date().toISOString(),
+					source: {
+						content: &#039;**Baz quux**&#039;,
+						mediaType: &#039;text/markdown&#039;,
+					},
+				};
+				const remoteUser = {
+					&#039;@context&#039;: &#039;https://www.w3.org/ns/activitystreams&#039;,
+					id: &#039;https://example.org/user/foobar&#039;,
+					url: &#039;https://example.org/user/foobar&#039;,
+
+					type: &#039;Person&#039;,
+					name: &#039;Foo Bar&#039;,
+					preferredUsername: &#039;foobar&#039;,
+					publicKey: {
+						id: &#039;https://example.org/user/foobar#key&#039;,
+						owner: &#039;https://example.org/user/foobar&#039;,
+						publicKeyPem: &#039;publickey&#039;,
+					},
+				};
+
+				let topic;
+
+				before(async function () {
+					this.timeout(60000);
+					const controllers = require(&#039;../src/controllers&#039;);
+
+					activitypub._cache.set(`0;${id}`, remoteNote);
+					activitypub._cache.set(`0;https://example.org/user/foobar`, remoteUser);
+					await db.sortedSetAdd(`followersRemote:${remoteUser.id}`, Date.now(), 1); // fake a follow
+					await controllers.activitypub.postInbox({
+						body: {
+							type: &#039;Create&#039;,
+							actor: &#039;https://example.org/user/foobar&#039;,
+							object: remoteNote,
+						},
+					}, { sendStatus: () =&gt; {} });
+				});
+
+				it(&#039;should create a new topic if Note is at root-level or its parent has not been seen before&#039;, async () =&gt; {
+					const saved = await db.getObject(`post:${id}`);
+
+					assert(saved);
+					assert(saved.tid);
+
+					topic = await topics.getTopicData(saved.tid);
+					const { uid, mainPid } = topic;
+					assert(uid &amp;&amp; mainPid);
+					const { content, sourceContent } = await posts.getPostData(mainPid);
+					assert.strictEqual(uid, &#039;https://example.org/user/foobar&#039;);
+					assert.strictEqual(content, &#039;&#039;);
+					assert.strictEqual(sourceContent, &#039;**Baz quux**&#039;);
+				});
+
+				it(&#039;should properly save the topic title in the topic hash&#039;, async () =&gt; {
+					assert.strictEqual(topic.title, &#039;Foo Bar&#039;);
+				});
+
+				it(&#039;should properly save the mainPid in the topic hash&#039;, async () =&gt; {
+					assert.strictEqual(topic.mainPid, id);
+				});
+
+				// todo: test topic replies, too
+			});
+		});
+	});
+
+	describe(&#039;Serving of local assets to remote clients (mocking)&#039;, () =&gt; {
+		describe(&#039;Note&#039;, () =&gt; {
+			let cid;
+			let uid;
+
+			before(async () =&gt; {
+				({ cid } = await categories.create({ name: utils.generateUUID().slice(0, 8) }));
+				const slug = slugify(utils.generateUUID().slice(0, 8));
+				uid = await user.create({ username: slug });
+			});
+
+			describe(&#039;Existing and resolvable&#039;, () =&gt; {
+				let body;
+				let response;
+				let postData;
+
+				before(async () =&gt; {
+					({ postData } = await topics.post({
+						uid,
+						cid,
+						title: &#039;Lorem &quot;Lipsum&quot; Ipsum&#039;,
+						content: &#039;Lorem ipsum dolor sit amet&#039;,
+					}));
+
+					({ body, response } = await request.get(`${nconf.get(&#039;url&#039;)}/post/${postData.pid}`, {
+						headers: {
+							Accept: &#039;application/ld+json; profile=&quot;https://www.w3.org/ns/activitystreams&quot;&#039;,
+						},
+					}));
+				});
+
+				it(&#039;should return a 404 on a non-existant post&#039;, async () =&gt; {
+					const { response } = await request.get(`${nconf.get(&#039;url&#039;)}/post/${parseInt(postData.pid, 10) + 1}`, {
+						headers: {
+							Accept: &#039;application/ld+json; profile=&quot;https://www.w3.org/ns/activitystreams&quot;&#039;,
+						},
+					});
+
+					assert.strictEqual(response.statusCode, 404);
+				});
+
+				it(&#039;should return a 200 response on an existing post&#039;, () =&gt; {
+					assert.strictEqual(response.statusCode, 200);
+				});
+
+				it(&#039;should return the expected Content-Type header&#039;, () =&gt; {
+					assert.strictEqual(response.headers[&#039;content-type&#039;], &#039;application/activity+json; charset=utf-8&#039;);
+				});
+
+				it(&#039;Topic title (`name`) should not be escaped&#039;, () =&gt; {
+					assert.strictEqual(body.name, &#039;Lorem &quot;Lipsum&quot; Ipsum&#039;);
+				});
+			});
+
+			describe(&#039;Soft deleted&#039;, () =&gt; {
+				let body;
+				let response;
+				let postData;
+
+				before(async () =&gt; {
+					({ postData } = await topics.post({
+						uid,
+						cid,
+						title: utils.generateUUID(),
+						content: utils.generateUUID(),
+					}));
+
+					await posts.delete(postData.pid, uid);
+
+					({ body, response } = await request.get(`${nconf.get(&#039;url&#039;)}/post/${postData.pid}`, {
+						headers: {
+							Accept: &#039;application/ld+json; profile=&quot;https://www.w3.org/ns/activitystreams&quot;&#039;,
+						},
+					}));
+				});
+
+				it(&#039;should return a 200 response on an existing post&#039;, () =&gt; {
+					assert.strictEqual(response.statusCode, 200);
+				});
+
+				it(&#039;should return a Tombstone object&#039;, () =&gt; {
+					assert.strictEqual(body.type, &#039;Tombstone&#039;);
+				});
+
+				it(&#039;should still retain the existing id and former type&#039;, () =&gt; {
+					assert.strictEqual(body.id, `${nconf.get(&#039;url&#039;)}/post/${postData.pid}`);
+					assert.strictEqual(body.formerType, &#039;Note&#039;);
+				});
+
+				it(&#039;should still contain contextual information (context, audience, attributedTo)&#039;, () =&gt; {
+					assert([&#039;context&#039;, &#039;audience&#039;, &#039;attributedTo&#039;].every(prop =&gt; body.hasOwnProperty(prop) &amp;&amp; body[prop]));
+				});
+			});
+		});
+	});
+
+	describe(&#039;ActivityPub&#039;, async () =&gt; {
+		let files;
+
+		before(async () =&gt; {
+			files = await file.walk(path.resolve(__dirname, &#039;./activitypub&#039;));
+		});
+
+		it(&#039;subfolder tests&#039;, () =&gt; {
+			files.forEach((filePath) =&gt; {
+				require(filePath);
+			});
+		});
+	});
+});</textarea>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="container">
+    <p>.</p>
+  </div>
+</footer>
+
+<script type="text/html" id="complexity-popover-template">
+  <div class="complexity-notice">
+    Complexity : {{ cyclomatic }} <br>
+    Length : {{ halstead.length }} <br>
+    Difficulty : {{ halstead.difficulty.toFixed(2) }} <br>
+    Est # bugs : {{ halstead.bugs.toFixed(2) }}<br>
+  </div>
+</script>
+
+<script type="text/javascript" src="../../assets/scripts/bundles/core-bundle.js"></script>
+<script type="text/javascript" src="../../assets/scripts/bundles/codemirror.js"></script>
+<script type="text/javascript" src="../../assets/scripts/codemirror.markpopovertext.js"></script>
+<script type="text/javascript" src="report.js"></script>
+<script type="text/javascript" src="report.history.js"></script>
+<script type="text/javascript" src="../../assets/scripts/plato-file.js"></script>
+</body>
+</html>
