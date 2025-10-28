@@ -11,6 +11,8 @@ WORKDIR /usr/src/app/
 
 COPY . /usr/src/app/
 
+COPY plugins ./plugins
+
 # Install corepack to allow usage of other package managers
 RUN corepack enable
 
