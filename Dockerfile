@@ -61,6 +61,9 @@ COPY --from=build --chown=${USER}:${USER} /usr/bin/tini /usr/src/app/install/doc
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     && chmod +x /usr/local/bin/tini
 
+RUN rm -rf /usr/src/app/node_modules/nodebb-plugin-composer-default \
+    && cp -r /usr/src/app/plugins/nodebb-plugin-composer-default /usr/src/app/node_modules/nodebb-plugin-composer-default
+
 # TODO: Have docker-compose use environment variables to create files like setup.json and config.json.
 # COPY --from=hairyhenderson/gomplate:stable /gomplate /usr/local/bin/gomplate
 
