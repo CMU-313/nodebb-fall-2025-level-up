@@ -56,7 +56,8 @@ RUN corepack enable \
     && mkdir -p /usr/src/app/logs/ /opt/config/ \
     && chown -R ${USER}:${USER} /usr/src/app/ /opt/config/
 
-COPY --from=build --chown=${USER}:${USER} /usr/src/app/ /usr/src/app/install/docker/setup.json /usr/src/app/
+COPY --from=build --chown=${USER}:${USER} /usr/src/app/ /usr/src/app/
+COPY --from=build --chown=${USER}:${USER} /usr/src/app/install/docker/setup.json /usr/src/app/install/docker/setup.json
 COPY --from=build --chown=${USER}:${USER} /usr/bin/tini /usr/src/app/install/docker/entrypoint.sh /usr/local/bin/
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \
