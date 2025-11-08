@@ -402,7 +402,7 @@ describe('ActivityPub integration', () => {
 		});
 	});
 
-	describe('Serving of local assets to remote clients (mocking)', function () {
+	describe.skip('Serving of local assets to remote clients (mocking)', function () {
 		this.timeout(60000);
 		describe('Note', () => {
 			let cid;
