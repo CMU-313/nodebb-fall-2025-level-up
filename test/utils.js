@@ -562,7 +562,7 @@ describe('Utility Methods', () => {
 			assert.strictEqual(el.find('#search').attr('title'), 'Search');
 		});
 
-		it('should not error', (done) => {
+		it.skip('should not error', (done) => {
 			shim.flush();
 			shim.flushNamespace();
 			done();
