@@ -3,7 +3,7 @@
 const translatorApi = module.exports;
 
 translatorApi.translate = async function (postData) {
-	const TRANSLATOR_API = process.env.TRANSLATOR_API || 'http://127.0.0.1:8080';
+	const TRANSLATOR_API = process.env.TRANSLATOR_API || 'http://128.2.220.236:8080';
 
 	try {
 		const url = `${TRANSLATOR_API}/?content=${encodeURIComponent(postData.content)}`;
