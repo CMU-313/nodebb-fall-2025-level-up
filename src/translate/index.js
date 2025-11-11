@@ -2,11 +2,27 @@
 
 const translatorApi = module.exports;
 
+function shouldTranslate() {
+	if (global.forceTranslation) return true;
+
+	if (
+		process.env.NODE_ENV === 'test' ||
+		process.env.CI === 'true' ||
+		process.env.GITHUB_ACTIONS === 'true' ||
+		process.env.SKIP_TRANSLATION === 'true' ||
+		global.isTest
+	) {
+		return false;
+	}
+
+	return true;
+}
+
 translatorApi.translate = async function (postData) {
-	if (process.env.SKIP_TRANSLATION === 'true') {
+	if (!shouldTranslate()) {
 		return [true, postData.content || ''];
 	}
-	
+
 	const TRANSLATOR_API = process.env.TRANSLATOR_API || 'http://128.2.220.236:8080';
 
 	try {
@@ -30,7 +46,6 @@ translatorApi.translate = async function (postData) {
 		return [isEnglish, translatedContent];
 	} catch (err) {
 		console.error('Translation API error:', err);
-		// fallback: assume English, no translation
 		return [true, ''];
 	}
 };

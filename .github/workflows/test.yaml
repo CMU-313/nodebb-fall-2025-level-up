@@ -24,6 +24,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TEST_ENV: 'production'
+      # Disable translation calls during CI runs
+      SKIP_TRANSLATION: 'true'
+      NODE_ENV: 'test'
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
 
     services:
       redis:
