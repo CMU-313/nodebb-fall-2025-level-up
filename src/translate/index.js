@@ -1,11 +1,53 @@
-
 /* eslint-disable strict */
-//var request = require('request');
 
 const translatorApi = module.exports;
 
-translatorApi.translate = function (postData) {
-	return ['is_english',postData];
+function shouldTranslate() {
+	if (global.forceTranslation) return true;
+
+	if (
+		process.env.NODE_ENV === 'test' ||
+		process.env.CI === 'true' ||
+		process.env.GITHUB_ACTIONS === 'true' ||
+		process.env.SKIP_TRANSLATION === 'true' ||
+		global.isTest
+	) {
+		return false;
+	}
+
+	return true;
+}
+
+translatorApi.translate = async function (postData) {
+	if (!shouldTranslate()) {
+		return [true, postData.content || ''];
+	}
+
+	const TRANSLATOR_API = process.env.TRANSLATOR_API || 'http://128.2.220.236:8080';
+
+	try {
+		const url = `${TRANSLATOR_API}/?content=${encodeURIComponent(postData.content)}`;
+		console.log('[translator] sending to:', url);
+
+		const response = await fetch(url);
+		const data = await response.json();
+
+		const isEnglish = Boolean(data.is_english);
+		let translatedContent = data.translated_content;
+
+		if (typeof translatedContent !== 'string') {
+			try {
+				translatedContent = JSON.stringify(translatedContent);
+			} catch {
+				translatedContent = String(translatedContent);
+			}
+		}
+
+		return [isEnglish, translatedContent];
+	} catch (err) {
+		console.error('Translation API error:', err);
+		return [true, ''];
+	}
 };
 
 // translatorApi.translate = async function (postData) {
