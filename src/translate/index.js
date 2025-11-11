@@ -3,8 +3,7 @@
 const translatorApi = module.exports;
 
 translatorApi.translate = async function (postData) {
-	if (process.env.NODE_ENV === 'test') {
-		// Skip translation during automated tests
+	if (process.env.SKIP_TRANSLATION === 'true') {
 		return [true, postData.content || ''];
 	}
 	
